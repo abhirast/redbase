@@ -78,6 +78,12 @@ public:
     RC CloseScan ();                             // Close the scan
 };
 
+//TODO: Store more relevant information 
+struct RM_PageHdr {
+    unsigned short int RecordLength; // length of each record
+};
+
+
 //
 // RM_Manager: provides RM file management
 //
@@ -91,11 +97,17 @@ public:
     RC OpenFile   (const char *fileName, RM_FileHandle &fileHandle);
 
     RC CloseFile  (RM_FileHandle &fileHandle);
+    
+private:
+    PF_Manager pf_manager;
 };
 
 //
 // Print-error function
 //
 void RM_PrintError(RC rc);
+
+// Define the error codes
+#define RM_BAD_REC_SIZE (START_RM_ERR - 0) // record size larger than page
 
 #endif
