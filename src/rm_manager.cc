@@ -14,72 +14,65 @@ RM_Manager::~RM_Manager() {
     // do necessary cleanup
     }
 
+/*  The macro RM_Error_Forward is defined in rm.h. If the PF module
+    returns a non-zero error code, that code is returned.
+    Steps - 
+    1. Check if the record size is valid
+    2. Call pfmanager to create a file named filename
+    3. Open the created file
+    4. Allocate a new header page and a new data page
+    5. Mark the header page dirty
+    6. Fetch the contents of the page and update the header
+    7. Unpin the pages
+    8. Close the file
+*/
 RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
-    // check if the record length is valid
+    
     if (recordSize > PF_PAGE_SIZE - sizeof(RM_PageHdr)) {
         return RM_BAD_REC_SIZE;
     }
-    // call pfmanager to create a file named filename
-    if ( RC create = pf_manager->CreateFile(fileName)) {
-        return create;
-    }
-    // define file handle and page handle to update the
-    // contents of file with header
+    
+    RM_ErrorForward(pf_manager->CreateFile(fileName));
+    // define a file handle and page handles to open the file
     PF_FileHandle fh;
-    PF_PageHandle ph;
-    // open the file
-    if (RC open = pf_manager->OpenFile(fileName, fh)) {
-        return open;
-    }
-    // allocate a new page, the page is automatically pinned
-    if (RC allocate = fh.AllocatePage(ph)) {
-        return allocate;
-    }
-    // get the assigned page number
-    PageNum pgnum;
-    if (RC pnum = ph.GetPageNum(pgnum)) {
-        return pnum;
-    }
-    // mark the page as dirty
-    if (RC dirty = fh.MarkDirty(pgnum)) {
-        return dirty;
-    }
-    // get the contents of page to modify it
+    PF_PageHandle header, pg1;
+    RM_ErrorForward(pf_manager->OpenFile(fileName, fh));
+    RM_ErrorForward(fh.AllocatePage(header));
+    RM_ErrorForward(fh.AllocatePage(pg1));
+    // get the assigned page numbers
+    PageNum header_pnum, pg1_pnum;
+    RM_ErrorForward(ph.GetPageNum(header_pnum));
+    RM_ErrorForward(ph.GetPageNum(pg1_pnum));
+    // update the header
+    RM_ErrorForward(fh.MarkDirty(header_pnum));
     char *contents;
-    if (RC fetch = ph.GetData(contents)) {
-        return fetch;
-    }
-    // define the page header and write it to the file
-    RM_PageHdr pHdr;
-    pHdr.RecordLength = recordSize;
-    memcpy(contents, *pHdr, sizeof(RM_PageHdr));
-    // unpin the page
-    if (RC unpin = fh.UnpinPage(pgnum)) {
-        return unpin;
-    }
-    /*TODO
-    1. Do the fh and ph objects need to be deleted?
-    2. Is this a good programming structure?
-    3. What do I do with PF errors?
-    */
+    RM_ErrorForward(ph.GetData(contents));
+    RM_FileHdr fHdr;
+    fHdr.record_length = recordSize;
+    fHdr.first_data_page = pg1_pnum;
+    memcpy(contents, &fHdr, sizeof(RM_FileHdr));
+    // unpin the pages
+    RM_ErrorForward(fh.UnpinPage(header_pnum));
+    RM_ErrorForward(fh.UnpinPage(pg1_pnum));
+    RM_ErrorForward(pf_manager->CloseFile(fh));
     return OK_RC;
 }
 
+
 RC RM_Manager::DestroyFile(const char *fileName) {
     // destroy file using pfmanager
-    if (RC destroy = pf_manager->DestroyFile(fileName)) {
-        return destroy;
-    }
+    RM_ErrorForward(pf_manager->DestroyFile(fileName));
     // if successful, recurn the success code
     return OK_RC;
 }
+
 RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     /* Assumptions-
         1. If file has more than one open instance, each instance may be
         read but will not be modified.
         2. DestroyFile will never be called on an open file.
     */
-    
+
     // open file by using pfmanager
 
     //make fileHandle a handle for the open file

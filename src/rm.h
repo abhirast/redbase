@@ -79,8 +79,9 @@ public:
 };
 
 //TODO: Store more relevant information 
-struct RM_PageHdr {
-    unsigned short int RecordLength; // length of each record
+struct RM_FileHdr {
+    unsigned short int record_length; // length of each record
+    PageNum first_data_page;
 };
 
 
@@ -99,7 +100,7 @@ public:
     RC CloseFile  (RM_FileHandle &fileHandle);
     
 private:
-    PF_Manager pf_manager;
+    PF_Manager *pf_manager;
 };
 
 //
@@ -107,7 +108,13 @@ private:
 //
 void RM_PrintError(RC rc);
 
+// Macro for error forwarding
+#define RM_ErrorForward(expr) if ((RC rc = expr) != OK_RC) return rc
+
 // Define the error codes
 #define RM_BAD_REC_SIZE (START_RM_ERR - 0) // record size larger than page
+#define RM_PAGE_UNINIT (START_RM_ERR - 1) // RID page uninitialized
+#define RM_SLOT_UNINIT (START_RM_ERR - 2) // RID slot uninitialized
+
 
 #endif
