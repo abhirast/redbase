@@ -23,6 +23,20 @@
 #include "pf.h"
 
 //
+// Structures for file and page headers 
+//
+struct RM_FileHdr {
+    unsigned short int record_length; // length of each record
+    unsigned short int capacity;      // record capacity of a data page
+    PageNum first_data_page;          // page number of first data page
+};
+struct RM_PageHdr {
+    PageNum next;           // page number of the next page
+};
+
+
+
+//
 // RM_Record: RM Record interface
 //
 class RM_Record {
@@ -57,6 +71,11 @@ public:
     // Forces a page (along with any contents stored in this class)
     // from the buffer pool to disk.  Default value forces all pages.
     RC ForcePages (PageNum pageNum = ALL_PAGES);
+private:
+    RM_FileHdr fHdr;
+    PF_Manager *pf_manager;
+    int bIsOpen;
+    int bHeaderChanged;
 };
 
 //
@@ -78,11 +97,6 @@ public:
     RC CloseScan ();                             // Close the scan
 };
 
-//TODO: Store more relevant information 
-struct RM_FileHdr {
-    unsigned short int record_length; // length of each record
-    PageNum first_data_page;
-};
 
 
 //
@@ -103,13 +117,24 @@ private:
     PF_Manager *pf_manager;
 };
 
+// Function to calculate number of records per page
+int numRecordsPerPage(int recordSize);
+
+
+
 //
 // Print-error function
 //
 void RM_PrintError(RC rc);
 
+
+
+
 // Macro for error forwarding
 #define RM_ErrorForward(expr) if ((RC rc = expr) != OK_RC) return rc
+
+// Sentinel Page Number indicating end of linked list of pages
+#define RM_SENTINEL_PAGE -1
 
 // Define the error codes
 #define RM_BAD_REC_SIZE (START_RM_ERR - 0) // record size larger than page
