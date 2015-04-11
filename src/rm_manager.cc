@@ -6,6 +6,12 @@
 
 using namespace std;
 
+/* Notes-
+    1. The macro RM_Error_Forward is defined in rm.h. If the PF module
+    returns a non-zero error code, that code is returned.
+*/  
+
+
 RM_Manager::RM_Manager(PF_Manager &pfm) {
     // Store the reference to pfm
     pf_manager = &pfm;
@@ -13,12 +19,10 @@ RM_Manager::RM_Manager(PF_Manager &pfm) {
 
 
 RM_Manager::~RM_Manager() {
-    // do necessary cleanup
+    // no dynamic memory allocated, nothing to do
     }
 
-/*  The macro RM_Error_Forward is defined in rm.h. If the PF module
-    returns a non-zero error code, that code is returned.
-    Steps - 
+/*  Steps - 
     1. Check if the record size is valid
     2. Call pfmanager to create a file named filename
     3. Open the created file
@@ -31,7 +35,7 @@ RM_Manager::~RM_Manager() {
     1. Should the header page be forced to disk?
 */
 RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
-    RC WARN = RM_CREATE_WARN, ERR = RM_CREATE_ERR; // used by macro
+    RC WARN = RM_MANAGER_CREATE_WARN, ERR = RM_MANAGER_CREATE_ERR; // used by macro
     if (recordSize > PF_PAGE_SIZE - sizeof(RM_PageHdr) - 1 || recordSize <= 0) {
         return RM_BAD_REC_SIZE;
     }
@@ -44,7 +48,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     RM_ErrorForward(fh.AllocatePage(header));
     // get the assigned page number
     PageNum header_pnum;
-    RM_ErrorForward(ph.GetPageNum(header_pnum));
+    RM_ErrorForward(header.GetPageNum(header_pnum));
     // update the header
     RM_ErrorForward(fh.MarkDirty(header_pnum));
     char *contents;
@@ -52,6 +56,10 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     RM_FileHdr fHdr;
     fHdr.record_length = recordSize;
     fHdr.capacity = numRecordsPerPage(recordSize);
+    fHdr.bitmap_size = ceil(recordSize/8);
+    fHdr.bitmap_offset = sizeof(RM_PageHdr);
+    fHdr.first_record_offset = fHdr.bitmap_offset + fHdr.bitmap_size;
+    fHdr.header_pnum = header_pnum;
     memcpy(contents, &fHdr, sizeof(RM_FileHdr));
     // unpin the header
     RM_ErrorForward(fh.UnpinPage(header_pnum));
@@ -66,7 +74,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     2. Return the appropriate error code based on the result
 */
 RC RM_Manager::DestroyFile(const char *fileName) {
-    RC WARN = RM_DESTROY_WARN, ERR = RM_DESTROY_ERR; // used by macro
+    RC WARN = RM_MANAGER_DESTROY_WARN, ERR = RM_MANAGER_DESTROY_ERR; // used by macro
     RM_ErrorForward(pf_manager->DestroyFile(fileName));
     return OK_RC;
 }
@@ -85,7 +93,7 @@ RC RM_Manager::DestroyFile(const char *fileName) {
     5. Unpin the PF page handle  
 */
 RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
-    RC WARN = RM_OPEN_WARN, ERR = RM_OPEN_ERR; // used by macro
+    RC WARN = RM_MANAGER_OPEN_WARN, ERR = RM_MANAGER_OPEN_ERR; // used by macro
     if (fileHandle.bIsOpen) {
         RM_ErrorForward(1); // Positive number for warning
     }
@@ -100,7 +108,7 @@ RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     fileHandle.bHeaderChanged = 0;
     // get the assigned page number
     PageNum header_pnum;
-    RM_ErrorForward(fileHandle.pf_fh.GetPageNum(header_pnum));
+    RM_ErrorForward(header.GetPageNum(header_pnum));
     RM_ErrorForward(fileHandle.pf_filehandle.UnpinPage(header_pnum));
 }
 
@@ -114,7 +122,7 @@ RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     1. Should the file handle be destroyed?
 */
 RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
-    RC WARN = RM_CLOSE_WARN, ERR = RM_CLOSE_ERR; // used by macro
+    RC WARN = RM_MANAGER_CLOSE_WARN, ERR = RM_MANAGER_CLOSE_ERR; // used by macro
     if (fileHandle.bIsOpen == 0) {
         RM_ErrorForward(1); //Positive number for warning
     }
@@ -123,7 +131,7 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
         RM_ErrorForward(fileHandle.pf_fh.AllocatePage(header));
         // get the assigned page number
         PageNum header_pnum;
-        RM_ErrorForward(fileHandle.pf_fh.GetPageNum(header_pnum));
+        RM_ErrorForward(header.GetPageNum(header_pnum));
         // update the header
         RM_ErrorForward(fileHandle.pf_fh.MarkDirty(header_pnum));
         char *contents;

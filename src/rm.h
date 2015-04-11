@@ -28,10 +28,14 @@
 struct RM_FileHdr {
     unsigned short int record_length; // length of each record
     unsigned short int capacity;      // record capacity of a data page
-    PageNum first_data_page;          // page number of first data page
+    unsigned short int bitmap_size;
+    unsigned short int bitmap_offset;
+    unsigned short int first_record_offset;
+    PageNum header_pnum;
 };
+
 struct RM_PageHdr {
-    PageNum next;           // page number of the next page
+    int reserved;           // reserved for later use
 };
 
 
@@ -50,12 +54,17 @@ public:
 
     // Return the RID associated with the record
     RC GetRid (RID &rid) const;
+private:
+    RID rid;
+    char *record;
+    int bIsAllocated;
 };
 
 //
 // RM_FileHandle: RM File interface
 //
 class RM_FileHandle {
+    friend class RM_Manager;
 public:
     RM_FileHandle ();
     ~RM_FileHandle();
@@ -73,9 +82,16 @@ public:
     RC ForcePages (PageNum pageNum = ALL_PAGES);
 private:
     RM_FileHdr fHdr;
-    PF_Manager *pf_manager;
+    PF_FileHandle pf_fh;
     int bIsOpen;
     int bHeaderChanged;
+    // Functions for handling bit array
+    RC SetBit(char *bitarray, int position);              // sets the bit 1
+    RC UnsetBit(char *bitarray, int position);            // sets the bit 0
+    RC GetBit(char *bitarray, int position, int &status); // gets the bit state
+    // Sets rid to a free record location
+    RC FindPlace(RID &rid, PF_PageHandle &pf_ph);
+    SlotNum FindSlot(char *bitmap);
 };
 
 //
@@ -131,15 +147,28 @@ void RM_PrintError(RC rc);
 
 
 // Macro for error forwarding
-#define RM_ErrorForward(expr) if ((RC rc = expr) != OK_RC) return rc
+// WARN and ERR to be defined in the context where macro is used
+#define RM_ErrorForward(expr) if ((RC rc = (expr)) != OK_RC) \
+        return (rc > 0) ? WARN : ERR
 
-// Sentinel Page Number indicating end of linked list of pages
-#define RM_SENTINEL_PAGE -1
 
 // Define the error codes
-#define RM_BAD_REC_SIZE (START_RM_ERR - 0) // record size larger than page
-#define RM_PAGE_UNINIT (START_RM_ERR - 1) // RID page uninitialized
-#define RM_SLOT_UNINIT (START_RM_ERR - 2) // RID slot uninitialized
+//TODO: define the codes properly
+#define RM_BAD_REC_SIZE             (START_RM_WARN + 0) // record size larger than page
+#define RM_RID_PAGE_UNINIT          (START_RM_WARN + 1) // RID page uninitialized
+#define RM_RID_SLOT_UNINIT          (START_RM_WARN + 2) // RID slot uninitialized
+#define RM_MANAGER_CREATE_WARN      (START_RM_WARN + 3) // Unable to create file
+#define RM_MANAGER_DESTROY_WARN     (START_RM_WARN + 4) // Unable to destroy file
+#define RM_MANAGER_OPEN_WARN        (START_RM_WARN + 5) // 
+#define RM_MANAGER_CLOSE_WARN       (START_RM_WARN + 6)
+#define RM_FILE_NOT_OPEN            (START_RM_WARN + 7)
+#define RM_INVALID_RID
+#define RM_INVALID_PAGE
+#define RM_INSERT_FAIL
 
-
+#define RM_MANAGER_CREATE_ERR       (START_RM_ERR - 0)
+#define RM_MANAGER_DESTROY_ERR      (START_RM_ERR - 1)
+#define RM_MANAGER_OPEN_ERR         (START_RM_ERR - 2)
+#define RM_MANAGER_CLOSE_ERR        (START_RM_ERR - 3)
+#define RM_FILEHANDLE_FATAL
 #endif
