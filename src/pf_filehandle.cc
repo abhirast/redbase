@@ -509,4 +509,3 @@ int PF_FileHandle::IsValidPageNum(PageNum pageNum) const
          pageNum >= 0 &&
          pageNum < hdr.numPages);
 }
-

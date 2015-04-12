@@ -31,8 +31,8 @@ RM_FileHandle::~RM_FileHandle() {
 RC RM_FileHandle::GetRec(const RID &rid, RM_Record &rec) const {
 	RC WARN = RM_INVALID_RID, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
-	PageNum pnum;
-	SlotNum snum;
+	int pnum;
+	int snum;
 	RM_ErrorForward(rid.GetPageNum(pnum));
 	RM_ErrorForward(rid.GetSlotNum(snum));
 	PF_PageHandle page;
@@ -70,7 +70,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	RC WARN = RM_INSERT_FAIL, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
 	PF_PageHandle pf_ph;
-	PageNum dest_page;
+	int dest_page;
 	if (fHdr.first_free == RM_SENTINEL) {
 		pf_fh.AllocatePage(pf_ph);
 		pf_ph.GetPageNum(dest_page);
@@ -88,18 +88,18 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 		fHdr.first_free = dest_page;
 		((RM_PageHdr*) data)->next_free = RM_SENTINEL;
 	}
-	SlotNum dest_slot = rid.GetSlotNum(data + fHdr.bitmap_offset);
+	int dest_slot = FindSlot(data + fHdr.bitmap_offset);
 	// Update the record on the file
 	RM_ErrorForward(DumpRecord(data, pData, dest_slot));
 	// update the record count and bitmap
 	((RM_PageHdr*) data)->num_recs ++;
-	RM_ErrorForward(SetBit(data + bitmap_offset, slot));
+	RM_ErrorForward(SetBit(data + fHdr.bitmap_offset, dest_slot));
 	// Remove the page from free list if the page became full
 	if (((RM_PageHdr*) data)->num_recs == fHdr.capacity) {
 		fHdr.first_free = ((RM_PageHdr*) data)->next_free;
 	}
 	rid = RID(dest_page, dest_slot);
-	RM_ErrorForward(pf_fh.UnpinPage(page));
+	RM_ErrorForward(pf_fh.UnpinPage(dest_page));
 	return OK_RC;
 }
 
@@ -118,8 +118,8 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
 	RC WARN = RM_INVALID_RID, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
 	// Read in the record page
-	PageNum pnum;
-	SlotNum snum;
+	int pnum;
+	int snum;
 	RM_ErrorForward(rid.GetPageNum(pnum));
 	RM_ErrorForward(rid.GetSlotNum(snum));
 	PF_PageHandle page;
@@ -127,10 +127,10 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
     char *data;
     RM_ErrorForward(page.GetData(data));
     int rec_exists;
-    RM_ErrorForward(GetBit(data+bitmap_offset, snum, rec_exists));
+    RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
     if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
 	// Unset the bit in bitmap
-	RM_ErrorForward(UnsetBit(data + bitmap_offset, snum));
+	RM_ErrorForward(UnsetBit(data + fHdr.bitmap_offset, snum));
 	if (((RM_PageHdr*) data)->num_recs == fHdr.capacity) {
 		((RM_PageHdr*) data)->next_free = fHdr.first_free;
 		fHdr.first_free = pnum;
@@ -152,8 +152,8 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
 	if (rec.bIsAllocated == 0) return RM_INVALID_RECORD;
 	// Read in the record page
-	PageNum pnum;
-	SlotNum snum;
+	int pnum;
+	int snum;
 	RM_ErrorForward(rec.rid.GetPageNum(pnum));
 	RM_ErrorForward(rec.rid.GetSlotNum(snum));
 	PF_PageHandle page;
@@ -161,7 +161,7 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
     char *data;
     RM_ErrorForward(page.GetData(data));
     int rec_exists;
-    RM_ErrorForward(GetBit(data+bitmap_offset, snum, rec_exists));
+    RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
     if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
 	// Update the record
 	RM_ErrorForward(DumpRecord(data, rec.record, snum));
@@ -175,7 +175,7 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
 	1. Check if the file is open
 	2. Call the pf filehandle object to force the pages
 */
-RC RM_FileHandle::ForcePages (PageNum pageNum = ALL_PAGES) {
+RC RM_FileHandle::ForcePages (int pageNum) const{
 	RC WARN = RM_FORCEPAGE_FAIL, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
 	RM_ErrorForward(pf_fh.ForcePages(pageNum));
@@ -186,7 +186,7 @@ RC RM_FileHandle::ForcePages (PageNum pageNum = ALL_PAGES) {
 	beginning at memory location page into memory pointed by
 	buffer
 */
-RC RM_FileHandle::FetchRecord(char *page, char *buffer, SlotNum slot) {
+RC RM_FileHandle::FetchRecord(char *page, char *buffer, int slot) const{
 	if (slot >= fHdr.capacity) return RM_INVALID_RID;
 	char *location = page + fHdr.first_record_offset 
 						+ slot * fHdr.record_length;
@@ -198,7 +198,7 @@ RC RM_FileHandle::FetchRecord(char *page, char *buffer, SlotNum slot) {
 	residing in slot# slot of page beginning at memory location 
 	page
 */
-RC RM_FileHandle::DumpRecord(char *page, char *buffer, SlotNum slot) {
+RC RM_FileHandle::DumpRecord(char *page, const char *buffer, int slot) {
 	if (slot >= fHdr.capacity) return RM_INVALID_RID;
 	char *location = page + fHdr.first_record_offset 
 						+ slot * fHdr.record_length;
@@ -209,24 +209,24 @@ RC RM_FileHandle::DumpRecord(char *page, char *buffer, SlotNum slot) {
 
 // Functions for modifying bitmap
 
-RC RM_FileHandle::SetBit(char *bitmap, SlotNum index) {
-    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+RC RM_FileHandle::SetBit(char *bitmap, int index) const {
+    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
     int byte = index/8;
     int b_ind = index % 8;
     *(bitmap + byte) |= (1<<(7-b_ind));
-    return OK_RC
+    return OK_RC;
 }
 
-RC RM_FileHandle::UnsetBit(char *bitmap, SlotNum index) {
-    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+RC RM_FileHandle::UnsetBit(char *bitmap, int index) const {
+    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
     int byte = index/8;
     int b_ind = index % 8;
     *(bitmap + byte) &= (~(1<<(7-b_ind)));
     return OK_RC;
 }
 
-RC RM_FileHandle::GetBit(char *bitmap, SlotNum position, int& status) {
-    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+RC RM_FileHandle::GetBit(char *bitmap, int index, int& status) const {
+    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
     int byte = index/8;
     int b_ind = index%8;
     status = (*(bitmap + byte) & (1<<(7-b_ind))) > 0;
@@ -235,8 +235,8 @@ RC RM_FileHandle::GetBit(char *bitmap, SlotNum position, int& status) {
 
 // Function to find the first empty slot in a page
 // Slots are numbered from 0, 1, ..., capacity-1
-SlotNum RM_FileHandle::FindSlot(char *bitmap) {
-	SlotNum slot = -1, base = 0;
+int RM_FileHandle::FindSlot(char *bitmap) const{
+	int slot = -1, base = 0;
 	unsigned char byte;
 	for (int i = 0; i < fHdr.bitmap_size; i++) {
 		byte = (unsigned char) ~*(bitmap + i);
