@@ -6,6 +6,7 @@
 
 using namespace std;
 
+
 RM_FileHandle::RM_FileHandle() {
 	bIsOpen = 0;
 	bHeaderChanged = 0;
@@ -39,7 +40,7 @@ RC RM_FileHandle::GetRec(const RID &rid, RM_Record &rec) const {
     char *data;
     RM_ErrorForward(page.GetData(data));
     int rec_exists;
-    RM_ErrorForward(GetBit(data+bitmap_offset, snum, rec_exists));
+    RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
     if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
 	// If record object belonged to another record, free the memory
 	if (rec.bIsAllocated) delete[] rec.record;
@@ -75,7 +76,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 		pf_ph.GetPageNum(dest_page);
 	} else {
 		dest_page = fHdr.first_free;
-		pf_fh.GetThisPage(pf_ph);
+		pf_fh.GetThisPage(dest_page, pf_ph);
 	}
 	// Now pf_ph is the page handle to the page where record will 
 	// be inserted and its page number is dest_page
@@ -87,7 +88,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 		fHdr.first_free = dest_page;
 		((RM_PageHdr*) data)->next_free = RM_SENTINEL;
 	}
-	SlotNum dest_slot = GetSlotNum(data + fHdr.bitmap_offset);
+	SlotNum dest_slot = rid.GetSlotNum(data + fHdr.bitmap_offset);
 	// Update the record on the file
 	RM_ErrorForward(DumpRecord(data, pData, dest_slot));
 	// update the record count and bitmap
@@ -199,7 +200,7 @@ RC RM_FileHandle::FetchRecord(char *page, char *buffer, SlotNum slot) {
 */
 RC RM_FileHandle::DumpRecord(char *page, char *buffer, SlotNum slot) {
 	if (slot >= fHdr.capacity) return RM_INVALID_RID;
-	char *location = data + fHdr.first_record_offset 
+	char *location = page + fHdr.first_record_offset 
 						+ slot * fHdr.record_length;
 	memcpy(location, buffer, fHdr.record_length);
 	return OK_RC;
@@ -208,26 +209,26 @@ RC RM_FileHandle::DumpRecord(char *page, char *buffer, SlotNum slot) {
 
 // Functions for modifying bitmap
 
-RC RM_FileHandle::SetBit(char *bitmap, int index) {
-    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
-    int byte = position/8;
-    int b_ind = position % 8;
+RC RM_FileHandle::SetBit(char *bitmap, SlotNum index) {
+    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+    int byte = index/8;
+    int b_ind = index % 8;
     *(bitmap + byte) |= (1<<(7-b_ind));
     return OK_RC
 }
 
-RC RM_FileHandle::UnsetBit(char *bitmap, int index) {
-    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
-    int byte = position/8;
-    int b_ind = position % 8;
+RC RM_FileHandle::UnsetBit(char *bitmap, SlotNum index) {
+    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+    int byte = index/8;
+    int b_ind = index % 8;
     *(bitmap + byte) &= (~(1<<(7-b_ind)));
     return OK_RC;
 }
 
-RC RM_FileHandle::GetBit(char *bitmap, int position, int& status) {
-    if (index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
-    int byte = position/8;
-    int b_ind = position%8;
+RC RM_FileHandle::GetBit(char *bitmap, SlotNum position, int& status) {
+    if ((int) index >= fHdr.capacity) return RM_PAGE_OVERFLOW;
+    int byte = index/8;
+    int b_ind = index%8;
     status = (*(bitmap + byte) & (1<<(7-b_ind))) > 0;
     return OK_RC;
 }
@@ -258,4 +259,9 @@ SlotNum RM_FileHandle::FindSlot(char *bitmap) {
  	empty/full. Then the full pages are removed from the free page
  	list and the empty pages are flushed off and removed from the 
  	free page list.   
+*/
+
+/*
+Get page next to header
+
 */
