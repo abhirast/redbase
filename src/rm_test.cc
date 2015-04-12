@@ -486,6 +486,7 @@ RC Test2(void)
     if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
         (rc = OpenFile(FILENAME, fh)) ||
         (rc = AddRecs(fh, FEW_RECS)) ||
+        //(rc = VerifyFile(fh, FEW_RECS))||
         (rc = CloseFile(FILENAME, fh)))
         return (rc);
 

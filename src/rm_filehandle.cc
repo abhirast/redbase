@@ -57,6 +57,7 @@ RC RM_FileHandle::GetRec(const RID &rid, RM_Record &rec) const {
 	1. Check if the file is open
 	2. If a free page doesn't exist, allocate a new page
 	3. Else fetch the first free page
+	4. Mark the page dirty
 	4. Update the page header if a new page was allocated
 	5. Insert the record
 	6. Update the record count in the page header
@@ -82,6 +83,8 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	// be inserted and its page number is dest_page
 	char* data;
 	RM_ErrorForward(pf_ph.GetData(data));
+	// Mark the page dirty
+	RM_ErrorForward(pf_fh.MarkDirty(dest_page));
 	// Update the page header and file header if a new page was
 	// allocated
 	if (fHdr.first_free == RM_SENTINEL) {
@@ -107,6 +110,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	Steps-
 	1. Check if the file is open
 	2. Check if the record is valid
+	3. Mark the page dirty
 	3. Unset the bit in bitmap
 	4. If the page becomes empty, do something (TODO)
 	5. If the page was initially full, append it to the head of
@@ -129,7 +133,8 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
     int rec_exists;
     RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
     if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
-	// Unset the bit in bitmap
+	// Mark the page dirty and unset the bit in bitmap
+	RM_ErrorForward(pf_fh.MarkDirty(pnum));
 	RM_ErrorForward(UnsetBit(data + fHdr.bitmap_offset, snum));
 	if (((RM_PageHdr*) data)->num_recs == fHdr.capacity) {
 		((RM_PageHdr*) data)->next_free = fHdr.first_free;
@@ -144,6 +149,7 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
 	Steps- 
 	1. Check if the file is open
 	2. Check if the record is valid
+	3. Mark the page dirty
 	3. Update the record
 	4. Unpin the page
 */
@@ -163,7 +169,8 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
     int rec_exists;
     RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
     if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
-	// Update the record
+	// Mark the page dirty and update the record
+	RM_ErrorForward(pf_fh.MarkDirty(pnum));
 	RM_ErrorForward(DumpRecord(data, rec.record, snum));
 	RM_ErrorForward(pf_fh.UnpinPage(pnum));
 	return OK_RC;
