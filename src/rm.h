@@ -26,16 +26,19 @@
 // Structures for file and page headers 
 //
 struct RM_FileHdr {
-    unsigned short int record_length; // length of each record
-    unsigned short int capacity;      // record capacity of a data page
-    unsigned short int bitmap_size;
-    unsigned short int bitmap_offset;
-    unsigned short int first_record_offset;
-    PageNum header_pnum;
+    int record_length; // length of each record
+    int capacity;      // record capacity of a data page
+    int bitmap_size;
+    int bitmap_offset;
+    int first_record_offset;
+    int empty_page_count;
+    int header_pnum;
+    int first_free;
 };
 
 struct RM_PageHdr {
-    int reserved;           // reserved for later use
+    int next_free;
+    int num_recs;
 };
 
 
@@ -44,6 +47,8 @@ struct RM_PageHdr {
 // RM_Record: RM Record interface
 //
 class RM_Record {
+    friend class RM_FileHandle;
+    friend class RM_FileScan;
 public:
     RM_Record ();
     ~RM_Record();
@@ -65,6 +70,7 @@ private:
 //
 class RM_FileHandle {
     friend class RM_Manager;
+    friend class RM_FileScan;
 public:
     RM_FileHandle ();
     ~RM_FileHandle();
@@ -79,19 +85,20 @@ public:
 
     // Forces a page (along with any contents stored in this class)
     // from the buffer pool to disk.  Default value forces all pages.
-    RC ForcePages (PageNum pageNum = ALL_PAGES);
+    RC ForcePages (int pageNum) const;
 private:
     RM_FileHdr fHdr;
     PF_FileHandle pf_fh;
     int bIsOpen;
     int bHeaderChanged;
     // Functions for handling bit array
-    RC SetBit(char *bitarray, int position);              // sets the bit 1
-    RC UnsetBit(char *bitarray, int position);            // sets the bit 0
-    RC GetBit(char *bitarray, int position, int &status); // gets the bit state
-    // Sets rid to a free record location
-    RC FindPlace(RID &rid, PF_PageHandle &pf_ph);
-    SlotNum FindSlot(char *bitmap);
+    RC SetBit(char *bitarray, int position) const;              // sets the bit 1
+    RC UnsetBit(char *bitarray, int position) const;            // sets the bit 0
+    RC GetBit(char *bitarray, int position, int &status) const; // gets the bit state
+    int FindSlot(char *bitmap) const;
+    // Functions for updating records
+    RC FetchRecord(char *page, char *buffer, int slot) const;
+    RC DumpRecord(char *page, const char *buffer, int slot);
 };
 
 //
@@ -111,9 +118,34 @@ public:
                   ClientHint pinHint = NO_HINT); // Initialize a file scan
     RC GetNextRec(RM_Record &rec);               // Get next matching record
     RC CloseScan ();                             // Close the scan
+private:
+    const RM_FileHandle *rm_fh;
+    int bIsOpen;
+    int attr_offset;
+    int attr_length;
+    AttrType attr_type;
+    char *query_value;
+    ClientHint pin_hint;
+    // variables for file scan
+    int recs_seen;
+    int num_recs;
+    int current;
+    char *bitmap_copy;
+    PF_PageHandle pf_ph;
+    // pointer to a member function
+    bool (RM_FileScan::*comp)(void* attr);
+    
+    // Functions for comparison
+    void buffer(void *ptr, char* buff);
+    bool no_op(void* attr);
+    bool eq_op(void* attr);
+    bool ne_op(void* attr);
+    bool lt_op(void* attr);
+    bool gt_op(void* attr);
+    bool le_op(void* attr);
+    bool ge_op(void* attr);
+    RC GiveNewPage(char *&data);
 };
-
-
 
 //
 // RM_Manager: provides RM file management
@@ -131,10 +163,11 @@ public:
     
 private:
     PF_Manager *pf_manager;
+    // Function to calculate number of records per page
+    int numRecordsPerPage(int recordSize);
 };
 
-// Function to calculate number of records per page
-int numRecordsPerPage(int recordSize);
+
 
 
 
@@ -148,27 +181,43 @@ void RM_PrintError(RC rc);
 
 // Macro for error forwarding
 // WARN and ERR to be defined in the context where macro is used
-#define RM_ErrorForward(expr) if ((RC rc = (expr)) != OK_RC) \
-        return (rc > 0) ? WARN : ERR
+#define RM_ErrorForward(expr) do { \
+RC tmp_rc = (expr);\
+if (tmp_rc != OK_RC) \
+        return ((tmp_rc > 0) ? WARN : ERR); \
+} while (0)
+
+
+// Sentinel value for free page linked list
+#define RM_SENTINEL -1
 
 
 // Define the error codes
-//TODO: define the codes properly
+
+
+
+
 #define RM_BAD_REC_SIZE             (START_RM_WARN + 0) // record size larger than page
-#define RM_RID_PAGE_UNINIT          (START_RM_WARN + 1) // RID page uninitialized
-#define RM_RID_SLOT_UNINIT          (START_RM_WARN + 2) // RID slot uninitialized
-#define RM_MANAGER_CREATE_WARN      (START_RM_WARN + 3) // Unable to create file
-#define RM_MANAGER_DESTROY_WARN     (START_RM_WARN + 4) // Unable to destroy file
-#define RM_MANAGER_OPEN_WARN        (START_RM_WARN + 5) // 
-#define RM_MANAGER_CLOSE_WARN       (START_RM_WARN + 6)
-#define RM_FILE_NOT_OPEN            (START_RM_WARN + 7)
-#define RM_INVALID_RID
-#define RM_INVALID_PAGE
-#define RM_INSERT_FAIL
+#define RM_MANAGER_CREATE_WARN      (START_RM_WARN + 1) // Unable to create file
+#define RM_MANAGER_DESTROY_WARN     (START_RM_WARN + 2) // Unable to destroy file
+#define RM_MANAGER_OPEN_WARN        (START_RM_WARN + 3) // 
+#define RM_MANAGER_CLOSE_WARN       (START_RM_WARN + 4)
+#define RM_FILE_NOT_OPEN            (START_RM_WARN + 5)
+#define RM_INVALID_RID              (START_RM_WARN + 6)
+#define RM_INVALID_RECORD           (START_RM_WARN + 7)        
+#define RM_INVALID_PAGE             (START_RM_WARN + 8)        
+#define RM_INSERT_FAIL              (START_RM_WARN + 9)
+#define RM_FORCEPAGE_FAIL           (START_RM_WARN + 10)    
+#define RM_SCAN_NOT_OPEN            (START_RM_WARN + 11)    
+#define RM_PAGE_OVERFLOW            (START_RM_WARN + 12)
+#define RM_EOF                      (START_RM_WARN + 13)        
+#define RM_LASTWARN                 RM_EOF
 
 #define RM_MANAGER_CREATE_ERR       (START_RM_ERR - 0)
 #define RM_MANAGER_DESTROY_ERR      (START_RM_ERR - 1)
 #define RM_MANAGER_OPEN_ERR         (START_RM_ERR - 2)
 #define RM_MANAGER_CLOSE_ERR        (START_RM_ERR - 3)
-#define RM_FILEHANDLE_FATAL
+#define RM_FILEHANDLE_FATAL         (START_RM_ERR - 4)      
+#define RM_FILESCAN_FATAL           (START_RM_ERR - 5)      
+#define RM_LASTERROR                RM_FILESCAN_FATAL
 #endif
