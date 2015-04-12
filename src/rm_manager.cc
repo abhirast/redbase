@@ -36,7 +36,7 @@ RM_Manager::~RM_Manager() {
 */
 RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     RC WARN = RM_MANAGER_CREATE_WARN, ERR = RM_MANAGER_CREATE_ERR; // used by macro
-    if (recordSize > PF_PAGE_SIZE - sizeof(RM_PageHdr) - 1 || recordSize <= 0) {
+    if ((recordSize >= PF_PAGE_SIZE - (int) sizeof(RM_PageHdr)) || (recordSize <= 0)) {
         return RM_BAD_REC_SIZE;
     }
     
@@ -52,7 +52,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     // update the header
     RM_ErrorForward(fh.MarkDirty(header_pnum));
     char *contents;
-    RM_ErrorForward(ph.GetData(contents));
+    RM_ErrorForward(header.GetData(contents));
     RM_FileHdr fHdr;
     fHdr.record_length = recordSize;
     fHdr.capacity = numRecordsPerPage(recordSize);
@@ -60,6 +60,8 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     fHdr.bitmap_offset = sizeof(RM_PageHdr);
     fHdr.first_record_offset = fHdr.bitmap_offset + fHdr.bitmap_size;
     fHdr.header_pnum = header_pnum;
+    fHdr.empty_page_count = 0;
+    fHdr.first_free = RM_SENTINEL;
     memcpy(contents, &fHdr, sizeof(RM_FileHdr));
     // unpin the header
     RM_ErrorForward(fh.UnpinPage(header_pnum));
@@ -109,7 +111,8 @@ RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     // get the assigned page number
     PageNum header_pnum;
     RM_ErrorForward(header.GetPageNum(header_pnum));
-    RM_ErrorForward(fileHandle.pf_filehandle.UnpinPage(header_pnum));
+    RM_ErrorForward(fileHandle.pf_fh.UnpinPage(header_pnum));
+    return OK_RC;
 }
 
 /*  Close the file instance using PF_Manager object and clean the fileHandle
@@ -128,20 +131,17 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
     }
     if (fileHandle.bHeaderChanged) {
         PF_PageHandle header;
-        RM_ErrorForward(fileHandle.pf_fh.AllocatePage(header));
-        // get the assigned page number
-        PageNum header_pnum;
-        RM_ErrorForward(header.GetPageNum(header_pnum));
+        int header_pnum = fileHandle.fHdr.header_pnum;
+        RM_ErrorForward(fileHandle.pf_fh.GetThisPage(header_pnum, header));
         // update the header
         RM_ErrorForward(fileHandle.pf_fh.MarkDirty(header_pnum));
         char *contents;
-        RM_ErrorForward(fileHandle.pf_fh.GetData(contents));
+        RM_ErrorForward(header.GetData(contents));
         memcpy(contents, &fileHandle.fHdr, sizeof(RM_FileHdr));
         // unpin the header
         RM_ErrorForward(fileHandle.pf_fh.UnpinPage(header_pnum));
     }
     RM_ErrorForward(pf_manager->CloseFile(fileHandle.pf_fh));
-    // Alternatvily, could call the constructor of fileHandle
     fileHandle.bIsOpen = 0;
     fileHandle.bHeaderChanged = 0;
     return OK_RC;
@@ -150,7 +150,7 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
 // Function to figure out max number of records that can be put in
 // page. A separate function needs to be written because the page
 // header has a bitmap whose size depends on the number of pages
-int numRecordsPerPage(int rec_size) {
+int RM_Manager::numRecordsPerPage(int rec_size) {
     int num = 0;
     int effective_psize = PF_PAGE_SIZE - sizeof(RM_PageHdr);
     while (num * rec_size +  ceil(num/8) < effective_psize) num++;
