@@ -20,6 +20,22 @@ RID::~RID(){
 	// Nothing to do
 }
 
+// Copy constructor
+RID::RID(const RID &rid) {
+	this->pageNum = rid.pageNum;
+	this->slotNum = rid.slotNum;
+}						   
+
+// Assignment operator
+RID& RID::operator=(const RID &rid) {
+	if (this != &rid ) {
+		this->pageNum = rid.pageNum;
+		this->slotNum = rid.slotNum;	
+	}
+	return (*this);
+}
+
+
 // Return page number
 RC RID::GetPageNum(PageNum &pageNum) const {
 	// Error if RID not initialized using second constructor
