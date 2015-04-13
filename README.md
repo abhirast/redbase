@@ -1,25 +1,30 @@
 # rm_DOC #
 
-Your overall design
-The key data structures used in your component
-Your testing process
-Any known bugs
-Any assistance you received (from the instructor, TA, other students in the course, or anyone else) in program design or debugging, as per the Honor Code statement provided in the course homepage
-
-### File and Page Layout ###
+#### File and Page Layout ####
 Each file has its first page as the file header, on which the attributes which are specific to the file or common to all pages are stored. Similarly, each page has a page header storing some attributes along with a bitmap which tells which records are valid. Thus the organization of a file is- [File Header] [Page p1][Page p2][Page p3] ... [Page pn] Each page is organized as - [Page Header][Bitmap][Record R1][Record R2]...[Record Rm] where some of the record slots may have invalid data. Bitmap helps us to identify them.
 
-#### File Header####
 These attributes stored in file header are - (i)Size of record in bytes, (ii) Number of records that can fit on each page, (iii) Size of bitmap in bytes, (iv) Offset of bitmap in bytes from beginning of page (v) Offset of location of first record from the beginning of page (vi) Count of empty pages in file (vii) Page number of header page (viii) First page belonging to the linked list of free pages. Since the file header is accessed many times, it is stored in memory as a private member of the RM_FileHandle object. If the header is changed since the file was opened, the header page is loaded from disk and updated before the file is closed. 
 
-#### Page Header####
 The page header stores the number of valid records in the page and the page number of the next page in the free page linked list. Storing the number of valid records in the page header helps us prematurely terminate the scan of the complete page in some cases. For example if the page has only one valid record, we wont need to search for another valid record in the bitmap after we have the first valid record. 
 
-#### Maintaining Free Page List ####
+#### Keeping Track of Free Pages ####
 We want to keep the pages of database as full as possible because if we have more pages, we will need more IOs to scan through them. Since there can be arbitrary insertions and deletions in the database, it is necessary to keep track of pages which have some free space so that while inserting a record we can find them quickly. If we don't keep track of these pages, we will either need to do a linear scan of the file or assign new pages while insertion, both of which are expensive.
 
 As suggested in the specification doc, I used a linked list to keep track of free pages. The file header contains the page number of the head of the linked list. Each subsequent page in the linked list contains the page number of the next member in the list in its page header. The last page in the linked list has a special number RM_SENTINEL indicating the end of the list. While creation of file, there is no page other than the header and in this case the linked list is empty. Two kinds of pages get added to a free page linked list - (i) Newly allocated pages which are empty (ii) Pages which were full and just had a deletion. An addition to the list is made on the head and doesn't need any IOs to make updates to page header of other pages. 
 
+However, keeping a linked list of free pages doesn't make it convenient for us to get rid of empty pages. A free page located in the middle of the linked list may become empty and if we choose to delete it, the page header of its predecessor needs to be updated. This would need an extra i/o. In my current implementation I have not deleted the empty pages. Some alternatives which can help us to delete some or all empty pages are- (i) Delete a free page only if it comes to the head of the free page linked list and the free page linked list has other pages in it. (ii) Keep a list of empty pages in the file header so that they can be avoided during file scan. If this list becomes larger than the page size, then incur the extra IO to delete these pages. (iii) Reconstruct the free page linked list during a file scan, getting rid of free pages in the process.
 
+#### Keeping Track of Free Records ####
+Each record page of a file has a bitmap which indicates whether a record slot is occupied or not. So, if there are n records in a page, then a bitmap of ceiling(n/8) bytes suffices. The indexing for the bits has been done using bitwise operators. There operations are declared as private methods of RM_FileHandle class. 
 
-#### 
+#### Optimizing Comparisons during File Scan ####
+During the file scan, we need to scan through all the records contained in all the pages of the file and compare them against the given attribute using the given comparator. We need to define separate functions implementing each of the comparators and call one of them based on the input comparator. One possible strategy is to condition on the given comparator each time we make a comparison. So if there are n records in total and 8 comparators, we will be making 4n comparisons on an average to decide the comparator. I have used function pointers to speed up this process. The pointer is set to point to the correct comparator when the scan is initialized and thus only 8 comparisons are needed in the worst case, independent of n.
+
+#### Pinning Strategy during File Scan ####
+I could think of two (un)pinning strategies- (i) Unpin the page after outputting a record. (ii) Keep the page pinned till all the records of the page have been examined. Consider the case of doing a block nested loop join on two relations R and S with comparable sizes. We read in a page of R as part of a scan and run a scan on S for each group of pages of R read. In this case the scan on S is fairly quick but the scan on R is slow. So, strategy (i) is more useful while scanning relation R and (ii) while scanning S. In my current implementation, I have implemented strategy (i). I preferred it over (ii) because if the scan is fast, it is highly likely that the unpinned page will still remain in the buffer pool. I intend to implement the second strategy as part of my personal extension. 
+
+#### Debugging and Tests ####
+I debugged the code using GDB and DDD. These tools were really helpful in isolating bugs. I ran the provided standard tests as well as rm_testrecsizes.cc and rm_testyh.cc given in the shared test repository. I was unable to compile some of the tests in the shared folder. I also wrote my own tests which test insertion of a large number of tuples and then check the output of the file scanner for some comparators. My code passed these tests. I also checked the integrity of the file and page headers using DDD and examined the changes as insertions were being made. I am not aware of any known bugs now but I would admit that I have not tested all the functions rigorously.
+
+#### Acknowledgements ####
+I would like to thank Jaeho for answering my questions and making many suggestions regarding coding efficiency and style, which includes the idea of using function pointers as described above. I would like to thank Prof. Hector for a discussion about keeping track of empty pages. I would also like to thank Aditya, with whom I discussed some implementation details.
