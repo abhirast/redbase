@@ -1,5 +1,5 @@
 //
-// File:        rm_testshell.cc
+// File:        rm_test.cc
 // Description: Test RM component
 // Authors:     Jan Jannink
 //              Dallan Quass (quass@cs.stanford.edu)
@@ -15,11 +15,16 @@
 // relation.  All scans are done via a FileScan.
 //
 
+// Abhinav Rastogi (arastogi@stanford.edu)
+// Added filescan test with comparators (Test 3)
+
+
 #include <cstdio>
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
 #include <cstdlib>
+#include <stdlib.h>
 
 #include "redbase.h"
 #include "pf.h"
@@ -34,7 +39,7 @@ using namespace std;
 #define STRLEN      29               // length of string in testrec
 #define PROG_UNIT   50               // how frequently to give progress
                                       //   reports when adding lots of recs
-#define FEW_RECS   20                // number of records added in
+#define FEW_RECS   100000                // number of records added in
 
 //
 // Computes the offset of a field in a record (should be in <stddef.h>)
@@ -47,9 +52,9 @@ using namespace std;
 // Structure of the records we will be using for the tests
 //
 struct TestRec {
-    char  str[STRLEN];
     int   num;
     float r;
+    char  str[STRLEN];
 };
 
 //
@@ -63,6 +68,7 @@ RM_Manager rmm(pfm);
 //
 RC Test1(void);
 RC Test2(void);
+RC Test3(void);
 
 void PrintError(RC rc);
 void LsFile(char *fileName);
@@ -83,11 +89,12 @@ RC GetNextRecScan(RM_FileScan &fs, RM_Record &rec);
 //
 // Array of pointers to the test functions
 //
-#define NUM_TESTS       2               // number of tests
+#define NUM_TESTS       3               // number of tests
 int (*tests[])() =                      // RC doesn't work on some compilers
 {
     Test1,
-    Test2
+    Test2,
+    Test3
 };
 
 //
@@ -445,6 +452,7 @@ RC GetNextRecScan(RM_FileScan &fs, RM_Record &rec)
     return (fs.GetNextRec(rec));
 }
 
+void PF_Statistics();
 /////////////////////////////////////////////////////////////////////
 // Sample test functions follow.                                   //
 /////////////////////////////////////////////////////////////////////
@@ -468,7 +476,7 @@ RC Test1(void)
 
     if ((rc = DestroyFile(FILENAME)))
         return (rc);
-
+    PF_Statistics();
     printf("\ntest1 done ********************\n");
     return (0);
 }
@@ -486,15 +494,138 @@ RC Test2(void)
     if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
         (rc = OpenFile(FILENAME, fh)) ||
         (rc = AddRecs(fh, FEW_RECS)) ||
-        //(rc = VerifyFile(fh, FEW_RECS))||
         (rc = CloseFile(FILENAME, fh)))
         return (rc);
+
 
     LsFile(FILENAME);
 
     if ((rc = DestroyFile(FILENAME)))
         return (rc);
-
+    PF_Statistics();
     printf("\ntest2 done ********************\n");
+    return (0);
+}
+
+
+/////////////////////////////////////////////////////////////////////////
+//                          New Tests                                  //
+/////////////////////////////////////////////////////////////////////////
+
+
+// Function for generating a random string
+void gen_random(char *s, const int len) {
+    for (int i = 0; i < len; ++i) {
+        int randomChar = rand()%(26+26+10);
+        if (randomChar < 26)
+            s[i] = 'a' + randomChar;
+        else if (randomChar < 26+26)
+            s[i] = 'A' + randomChar - 26;
+        else
+            s[i] = '0' + randomChar - 26 - 26;
+    }
+    s[len] = 0;
+}
+
+
+//
+// Test3 tests adding random strings 
+//
+
+#define err(expr) if ((rc = (expr))) return (rc)
+
+RC Test3(void)
+{
+    RC            rc;
+    RM_FileHandle fh;
+    RM_FileScan fs;
+    RM_Record temp_rec;
+
+    int     i;
+    TestRec recBuf;
+    RID     rid;
+    PageNum pageNum;
+    SlotNum slotNum;
+    int numRecs = 120;
+
+    printf("test3 starting ****************\n");
+
+    if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
+        (rc = OpenFile(FILENAME, fh)))
+        return (rc);
+
+    memset((void *)&recBuf, 0, sizeof(recBuf));
+
+    printf("\nadding %d random records\n", numRecs);
+    for (i = 0; i < numRecs; i++) {
+        gen_random(recBuf.str, STRLEN - 1);
+        recBuf.num = i;
+        recBuf.r = (float) i/3;
+        if ((rc = InsertRec(fh, (char *)&recBuf, rid)) ||
+            (rc = rid.GetPageNum(pageNum)) ||
+            (rc = rid.GetSlotNum(slotNum)))
+            return (rc);
+    }
+    err(CloseFile(FILENAME, fh));
+    
+    // Select using null data but valid operation
+    err(OpenFile(FILENAME, fh));
+    void *val;
+    err(fs.OpenScan(fh, INT, 4, 0, NE_OP, val, NO_HINT));
+    int count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", numRecs, count);
+    err(fs.CloseScan());
+
+    // select for ==
+    int lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, EQ_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", 1, count);
+    err(fs.CloseScan());
+
+    // select for !=
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, NE_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", numRecs-1, count);
+    err(fs.CloseScan());
+
+    // select for <
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, LT_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", lim, count);
+    err(fs.CloseScan());
+
+    // select for >
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, GT_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", numRecs - lim - 1, count);
+    err(fs.CloseScan());
+
+    // select for <=
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, LE_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected: %d Found: %d\n", lim+1, count);
+    err(fs.CloseScan());
+
+    // select for >=
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, GE_OP, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
+    printf("\nExpected:%d Found: %d\n", numRecs-lim, count);
+    err(fs.CloseScan());
+
+    err(rc = DestroyFile(FILENAME));
+    printf("\ntest3 done ********************\n");
     return (0);
 }
