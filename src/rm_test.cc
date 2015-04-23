@@ -1,5 +1,5 @@
 //
-// File:        rm_test.cc
+// File:        rm_testshell.cc
 // Description: Test RM component
 // Authors:     Jan Jannink
 //              Dallan Quass (quass@cs.stanford.edu)
@@ -14,10 +14,6 @@
 // interface.  For example, FileHandle no longer supports a Scan over the
 // relation.  All scans are done via a FileScan.
 //
-
-// Abhinav Rastogi (arastogi@stanford.edu)
-// Added filescan test with comparators (Test 3)
-
 
 #include <cstdio>
 #include <iostream>
@@ -69,6 +65,7 @@ RM_Manager rmm(pfm);
 RC Test1(void);
 RC Test2(void);
 RC Test3(void);
+RC Test4(void);
 
 void PrintError(RC rc);
 void LsFile(char *fileName);
@@ -89,12 +86,13 @@ RC GetNextRecScan(RM_FileScan &fs, RM_Record &rec);
 //
 // Array of pointers to the test functions
 //
-#define NUM_TESTS       3               // number of tests
+#define NUM_TESTS       4               // number of tests
 int (*tests[])() =                      // RC doesn't work on some compilers
 {
     Test1,
     Test2,
-    Test3
+    Test3,
+    Test4
 };
 
 //
@@ -513,7 +511,7 @@ RC Test2(void)
 /////////////////////////////////////////////////////////////////////////
 
 
-// Function for generating a random string
+
 void gen_random(char *s, const int len) {
     for (int i = 0; i < len; ++i) {
         int randomChar = rand()%(26+26+10);
@@ -525,7 +523,7 @@ void gen_random(char *s, const int len) {
             s[i] = '0' + randomChar - 26 - 26;
     }
     s[len] = 0;
-}
+    }
 
 
 //
@@ -546,7 +544,7 @@ RC Test3(void)
     RID     rid;
     PageNum pageNum;
     SlotNum slotNum;
-    int numRecs = 120;
+    int numRecs = 120000;
 
     printf("test3 starting ****************\n");
 
@@ -554,6 +552,9 @@ RC Test3(void)
         (rc = OpenFile(FILENAME, fh)))
         return (rc);
 
+    // We set all of the TestRec to be 0 initially.  This heads off
+    // warnings that Purify will give regarding UMR since sizeof(TestRec)
+    // is 40, whereas actual size is 37.
     memset((void *)&recBuf, 0, sizeof(recBuf));
 
     printf("\nadding %d random records\n", numRecs);
@@ -568,45 +569,21 @@ RC Test3(void)
     }
     err(CloseFile(FILENAME, fh));
     
-    // Select using null data but valid operation
+    // Select using null data
     err(OpenFile(FILENAME, fh));
     void *val;
     err(fs.OpenScan(fh, INT, 4, 0, NE_OP, val, NO_HINT));
     int count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", numRecs, count);
-    err(fs.CloseScan());
-
-    // select for ==
-    int lim = 40;
-    err(fs.OpenScan(fh, INT, 4, 0, EQ_OP, (void*) &lim, NO_HINT));
-    count = 0;
-    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", 1, count);
-    err(fs.CloseScan());
-
-    // select for !=
-    lim = 40;
-    err(fs.OpenScan(fh, INT, 4, 0, NE_OP, (void*) &lim, NO_HINT));
-    count = 0;
-    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", numRecs-1, count);
+    printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
 
     // select for <
-    lim = 40;
+    int lim = 40;
     err(fs.OpenScan(fh, INT, 4, 0, LT_OP, (void*) &lim, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", lim, count);
-    err(fs.CloseScan());
-
-    // select for >
-    lim = 40;
-    err(fs.OpenScan(fh, INT, 4, 0, GT_OP, (void*) &lim, NO_HINT));
-    count = 0;
-    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", numRecs - lim - 1, count);
+    printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
 
     // select for <=
@@ -614,18 +591,78 @@ RC Test3(void)
     err(fs.OpenScan(fh, INT, 4, 0, LE_OP, (void*) &lim, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected: %d Found: %d\n", lim+1, count);
-    err(fs.CloseScan());
-
-    // select for >=
-    lim = 40;
-    err(fs.OpenScan(fh, INT, 4, 0, GE_OP, (void*) &lim, NO_HINT));
-    count = 0;
-    while (fs.GetNextRec(temp_rec) == OK_RC) count ++;
-    printf("\nExpected:%d Found: %d\n", numRecs-lim, count);
+    printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
 
     err(rc = DestroyFile(FILENAME));
     printf("\ntest3 done ********************\n");
+    return (0);
+}
+
+
+//
+// Test 4
+//
+
+RC Test4(void)
+{
+    RC            rc;
+    RM_FileHandle fh;
+    RM_FileScan fs;
+    RM_Record temp_rec;
+
+    int     i;
+    TestRec recBuf;
+    RID     rid;
+    PageNum pageNum;
+    SlotNum slotNum;
+    int numRecs = 120;
+    int lim = 80;
+    CompOp op = NE_OP;
+
+    printf("test4 starting ****************\n");
+
+    if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
+        (rc = OpenFile(FILENAME, fh)))
+        return (rc);
+
+    // We set all of the TestRec to be 0 initially.  This heads off
+    // warnings that Purify will give regarding UMR since sizeof(TestRec)
+    // is 40, whereas actual size is 37.
+    memset((void *)&recBuf, 0, sizeof(recBuf));
+
+    printf("\nadding %d random records\n", numRecs);
+    for (i = 0; i < numRecs; i++) {
+        gen_random(recBuf.str, STRLEN - 1);
+        recBuf.num = i;
+        recBuf.r = (float) i/3;
+        if ((rc = InsertRec(fh, (char *)&recBuf, rid)) ||
+            (rc = rid.GetPageNum(pageNum)) ||
+            (rc = rid.GetSlotNum(slotNum)))
+            return (rc);
+    }
+    err(CloseFile(FILENAME, fh));
+    
+    err(OpenFile(FILENAME, fh));
+    void *val;
+    int count = 0;
+    char *result;
+
+    // select for <=
+    lim = 40;
+    err(fs.OpenScan(fh, INT, 4, 0, op, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) {
+        count ++;
+        err(temp_rec.GetData(result));
+        cout<<((TestRec*) result)->num<<endl;
+    }
+
+    printf("\nTotal %d out of %d records found\n", count, numRecs);
+    err(fs.CloseScan());
+
+    err(rc = DestroyFile(FILENAME));
+    PF_Statistics();
+    printf("\ntest4 done ********************\n");
     return (0);
 }

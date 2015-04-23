@@ -2,13 +2,15 @@
 #include <iostream>
 #include <cstring>
 #include "rm.h"
+#include "rm_internal.h"
 
 using namespace std;
 
 
 /* macro for writing comparison operators
 	This occurs in the body of the function having signature
-	bool RM_FileScan::**_op(void* attr)
+	bool RM_FileScan::xx_op(void* attr)
+	where xx = eq, lt, gt etc.
 */
 #define RM_filescan_operator(expr) do { \
     char attr_value[attr_length+1];\
@@ -62,7 +64,7 @@ RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
 	attr_type = attrType;
 	bIsOpen = 1;
 	query_value = new char[attr_length + 1];
-	buffer(value, query_value);
+	if (value) buffer(value, query_value);
 	pin_hint = pinHint;
 	switch (compOp) {
 		case NO_OP:
@@ -119,6 +121,7 @@ RC RM_FileScan::GetNextRec(RM_Record &rec) {
 	RC WARN = RM_EOF, ERR = RM_FILESCAN_FATAL; // used by macro
 	if (!bIsOpen) return RM_SCAN_NOT_OPEN;
 	if (!rm_fh->bIsOpen) return RM_FILE_NOT_OPEN;
+	// if record was allocated earlier, delete it
 	char *data;
 	SlotNum dest;
 	char* attr_position;
@@ -138,13 +141,11 @@ RC RM_FileScan::GetNextRec(RM_Record &rec) {
 							+ dest * rm_fh->fHdr.record_length 
 							+ attr_offset;
 			recs_seen ++;
+			RM_ErrorForward(rm_fh->SetBit(bitmap_copy, dest));
 			if ((this->*comp)(attr_position)) {
+				if (rec.bIsAllocated) delete[] rec.record;
 				rec.record = new char[rm_fh->fHdr.record_length];
 				RM_ErrorForward(rm_fh->FetchRecord(data, rec.record, dest));
-				// SetBit changes the filehandle object but we are 
-				// using it here for making changes to a copy of bitmap
-				// Hence using a different 
-				RM_ErrorForward(rm_fh->SetBit(bitmap_copy, dest));
 				rec.rid = RID(current, dest);
 				rec.bIsAllocated = 1;
 				bFound = 1;
@@ -158,10 +159,9 @@ RC RM_FileScan::GetNextRec(RM_Record &rec) {
 }
 
 RC RM_FileScan::CloseScan() {
-	if (bIsOpen) {
-		delete[] query_value;
-		delete[] bitmap_copy;
-	}
+	if (!bIsOpen) return RM_SCAN_NOT_OPEN;
+	delete[] query_value;
+	delete[] bitmap_copy;
 	bIsOpen = 0;
 	return OK_RC;
 }
@@ -173,9 +173,8 @@ RC RM_FileScan::GiveNewPage(char *&data) {
 		RM_ErrorForward(rm_fh->pf_fh.GetNextPage(current, pf_ph));
 		RM_ErrorForward(pf_ph.GetData(data));
 		num_recs = ((RM_PageHdr *) data)->num_recs;
-		if (num_recs == 0) continue;
 		RM_ErrorForward(pf_ph.GetPageNum(current));
-	} while(num_recs > 0);
+	} while(num_recs == 0);
 	memcpy(bitmap_copy, data+rm_fh->fHdr.bitmap_offset, rm_fh->fHdr.bitmap_size);
 	// Negate the bits because we are interested in taken slots
 	for (int i = 0; i < rm_fh->fHdr.bitmap_size; i++) {

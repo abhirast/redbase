@@ -22,26 +22,20 @@
 #include "rm_rid.h"
 #include "pf.h"
 
+
 //
-// Structures for file and page headers 
+// Structure for file header 
 //
 struct RM_FileHdr {
-    int record_length; // length of each record
-    int capacity;      // record capacity of a data page
-    int bitmap_size;
-    int bitmap_offset;
-    int first_record_offset;
-    int empty_page_count;
-    int header_pnum;
-    int first_free;
+    int record_length;          // length of each record
+    int capacity;               // record capacity of a data page
+    int bitmap_size;            // size of botmap in bytes
+    int bitmap_offset;          // byte offset of bitmap
+    int first_record_offset;    // byte offset of first record
+    int empty_page_count;       // number of empty pages
+    int header_pnum;            // page number of file header page
+    int first_free;             // page number of first free page
 };
-
-struct RM_PageHdr {
-    int next_free;
-    int num_recs;
-};
-
-
 
 //
 // RM_Record: RM Record interface
@@ -126,6 +120,7 @@ private:
     AttrType attr_type;
     char *query_value;
     ClientHint pin_hint;
+    CompOp comp_op;
     // variables for file scan
     int recs_seen;
     int num_recs;
@@ -177,25 +172,7 @@ private:
 void RM_PrintError(RC rc);
 
 
-
-
-// Macro for error forwarding
-// WARN and ERR to be defined in the context where macro is used
-#define RM_ErrorForward(expr) do { \
-RC tmp_rc = (expr);\
-if (tmp_rc != OK_RC) \
-        return ((tmp_rc > 0) ? WARN : ERR); \
-} while (0)
-
-
-// Sentinel value for free page linked list
-#define RM_SENTINEL -1
-
-
 // Define the error codes
-
-
-
 
 #define RM_BAD_REC_SIZE             (START_RM_WARN + 0) // record size larger than page
 #define RM_MANAGER_CREATE_WARN      (START_RM_WARN + 1) // Unable to create file

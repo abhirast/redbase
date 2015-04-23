@@ -75,8 +75,16 @@ enum CompOp {
 // Pin Strategy Hint
 //
 enum ClientHint {
-    NO_HINT                                     // default value
+    NO_HINT,          // default value
+    KEEP_PAGES
 };
+/*
+Hint meaning-
+1. NO_HINT - Unpin and flush after every update
+2. KEEP_PAGES - Keep the page pinned, it will be needed soon
+*/
+
+
 
 //
 // TRUE, FALSE and BOOLEAN

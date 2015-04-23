@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cmath>
 #include "rm.h"
+#include "rm_internal.h"
 
 using namespace std;
 
@@ -11,6 +12,7 @@ RM_FileHandle::RM_FileHandle() {
 	bIsOpen = 0;
 	bHeaderChanged = 0;
 }
+
 RM_FileHandle::~RM_FileHandle() {
 	// No dynamic memory allocated. Nothing to do.
 }

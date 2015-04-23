@@ -18,8 +18,10 @@ static char *RM_WarnMsg[] = {
   (char*)"invalid record id",
   (char*)"invalid or uninitialized record",
   (char*)"invalid page",
-  (char*)"a recoverable error occured while forcing pages to disk",
+  (char*)"recoverable error while inserting record",
+  (char*)"recoverable error while forcing pages to disk",
   (char*)"attempt to access a unopened scanner",
+  (char*)"location out of page bounds",
   (char*)"end of file reached"
 };
 

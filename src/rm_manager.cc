@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include "rm.h"
+#include "rm_internal.h"
 
 using namespace std;
 
@@ -56,7 +57,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     RM_FileHdr fHdr;
     fHdr.record_length = recordSize;
     fHdr.capacity = numRecordsPerPage(recordSize);
-    fHdr.bitmap_size = ceil(recordSize/8);
+    fHdr.bitmap_size = ceil(fHdr.capacity/8.0);
     fHdr.bitmap_offset = sizeof(RM_PageHdr);
     fHdr.first_record_offset = fHdr.bitmap_offset + fHdr.bitmap_size;
     fHdr.header_pnum = header_pnum;
@@ -65,6 +66,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     memcpy(contents, &fHdr, sizeof(RM_FileHdr));
     // unpin the header
     RM_ErrorForward(fh.UnpinPage(header_pnum));
+    // RM_ErrorForward(fh.ForcePages(header_pnum));
     RM_ErrorForward(pf_manager->CloseFile(fh));
     return OK_RC;
 }
@@ -141,6 +143,7 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
         // unpin the header
         RM_ErrorForward(fileHandle.pf_fh.UnpinPage(header_pnum));
     }
+    RM_ErrorForward(fileHandle.ForcePages(ALL_PAGES));
     RM_ErrorForward(pf_manager->CloseFile(fileHandle.pf_fh));
     fileHandle.bIsOpen = 0;
     fileHandle.bHeaderChanged = 0;
@@ -153,6 +156,6 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
 int RM_Manager::numRecordsPerPage(int rec_size) {
     int num = 0;
     int effective_psize = PF_PAGE_SIZE - sizeof(RM_PageHdr);
-    while (num * rec_size +  ceil(num/8) < effective_psize) num++;
+    while (num * rec_size +  ceil(num/8.0) < effective_psize) num++;
     return num - 1;
 }

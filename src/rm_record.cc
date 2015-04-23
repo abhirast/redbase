@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <iostream>
 #include "rm.h"
+#include "rm_internal.h"
 
 using namespace std;
 
