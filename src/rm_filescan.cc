@@ -174,6 +174,9 @@ RC RM_FileScan::GiveNewPage(char *&data) {
 		RM_ErrorForward(pf_ph.GetData(data));
 		num_recs = ((RM_PageHdr *) data)->num_recs;
 		RM_ErrorForward(pf_ph.GetPageNum(current));
+		if (num_recs == 0) {
+			RM_ErrorForward(rm_fh->pf_fh.UnpinPage(current));
+		}
 	} while(num_recs == 0);
 	memcpy(bitmap_copy, data+rm_fh->fHdr.bitmap_offset, rm_fh->fHdr.bitmap_size);
 	// Negate the bits because we are interested in taken slots

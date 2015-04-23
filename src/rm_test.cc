@@ -612,7 +612,7 @@ RC Test4(void)
     RM_Record temp_rec;
 
     int     i;
-    TestRec recBuf;
+    char record[10];
     RID     rid;
     PageNum pageNum;
     SlotNum slotNum;
@@ -621,22 +621,21 @@ RC Test4(void)
     CompOp op = NE_OP;
 
     printf("test4 starting ****************\n");
-
-    if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
+    cout<<"size of record is " << sizeof(record)<<endl;
+    if ((rc = CreateFile(FILENAME, sizeof(record))) ||
         (rc = OpenFile(FILENAME, fh)))
         return (rc);
 
     // We set all of the TestRec to be 0 initially.  This heads off
     // warnings that Purify will give regarding UMR since sizeof(TestRec)
     // is 40, whereas actual size is 37.
-    memset((void *)&recBuf, 0, sizeof(recBuf));
+    memset((void *)record, 0, sizeof(record));
 
     printf("\nadding %d random records\n", numRecs);
     for (i = 0; i < numRecs; i++) {
-        gen_random(recBuf.str, STRLEN - 1);
-        recBuf.num = i;
-        recBuf.r = (float) i/3;
-        if ((rc = InsertRec(fh, (char *)&recBuf, rid)) ||
+        memcpy(record+2, &i, 4);
+        cout<<*((int*) (record+2))<<"\t";
+        if ((rc = InsertRec(fh, record, rid)) ||
             (rc = rid.GetPageNum(pageNum)) ||
             (rc = rid.GetSlotNum(slotNum)))
             return (rc);
@@ -650,19 +649,38 @@ RC Test4(void)
 
     // select for <=
     lim = 40;
-    err(fs.OpenScan(fh, INT, 4, 0, op, (void*) &lim, NO_HINT));
+    op = EQ_OP;
+    err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) {
         count ++;
         err(temp_rec.GetData(result));
-        cout<<((TestRec*) result)->num<<endl;
+        //cout<<((TestRec*) result)->num<<endl;
     }
 
     printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
+    op = NO_OP;
+    err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
+    count = 0;
+    while (fs.GetNextRec(temp_rec) == OK_RC) {
+        count ++;
+        err(temp_rec.GetRid(rid));
+        err(fh.DeleteRec(rid));
+        //cout<<((TestRec*) result)->num<<endl;
+    }
+    cout<<"Deleted records : "<<count<<endl;
+    err(rc = CloseFile(FILENAME, fh));
 
-    err(rc = DestroyFile(FILENAME));
-    PF_Statistics();
+    err(OpenFile(FILENAME, fh));
+    op = NO_OP;
+    err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
+    PrintError(fs.GetNextRec(temp_rec));
+    err(fs.CloseScan());
+
+    err(CloseFile(FILENAME, fh));
+
+    // PF_Statistics();
     printf("\ntest4 done ********************\n");
     return (0);
 }
