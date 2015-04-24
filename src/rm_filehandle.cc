@@ -135,7 +135,10 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
     RM_ErrorForward(page.GetData(data));
     int rec_exists;
     RM_ErrorForward(GetBit(data+fHdr.bitmap_offset, snum, rec_exists));
-    if (rec_exists == 0) RM_ErrorForward(1); // Record doesn't exist, warn
+    if (rec_exists == 0) {
+    	RM_ErrorForward(pf_fh.UnpinPage(pnum));
+    	RM_ErrorForward(1); // Record doesn't exist, warn
+	}
 	// Mark the page dirty and unset the bit in bitmap
 	RM_ErrorForward(pf_fh.MarkDirty(pnum));
 	RM_ErrorForward(UnsetBit(data + fHdr.bitmap_offset, snum));

@@ -110,12 +110,12 @@ RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     char *data;
     RM_ErrorForward(header.GetData(data));
     memcpy(&fileHandle.fHdr, data, sizeof(RM_FileHdr));
-    fileHandle.bIsOpen = 1;
-    fileHandle.bHeaderChanged = 0;
     // get the assigned page number
     PageNum header_pnum;
     RM_ErrorForward(header.GetPageNum(header_pnum));
     RM_ErrorForward(fileHandle.pf_fh.UnpinPage(header_pnum));
+    fileHandle.bIsOpen = 1;
+    fileHandle.bHeaderChanged = 0;
     return OK_RC;
 }
 

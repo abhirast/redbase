@@ -372,7 +372,7 @@ RC PrintFile(RM_FileScan &fs)
 //
 RC CreateFile(char *fileName, int recordSize)
 {
-    printf("\ncreating %s\n", fileName);
+    // printf("\ncreating %s\n", fileName);
     return (rmm.CreateFile(fileName, recordSize));
 }
 
@@ -383,7 +383,7 @@ RC CreateFile(char *fileName, int recordSize)
 //
 RC DestroyFile(char *fileName)
 {
-    printf("\ndestroying %s\n", fileName);
+    // printf("\ndestroying %s\n", fileName);
     return (rmm.DestroyFile(fileName));
 }
 
@@ -394,7 +394,7 @@ RC DestroyFile(char *fileName)
 //
 RC OpenFile(char *fileName, RM_FileHandle &fh)
 {
-    printf("\nopening %s\n", fileName);
+    // printf("\nopening %s\n", fileName);
     return (rmm.OpenFile(fileName, fh));
 }
 
@@ -405,8 +405,8 @@ RC OpenFile(char *fileName, RM_FileHandle &fh)
 //
 RC CloseFile(char *fileName, RM_FileHandle &fh)
 {
-    if (fileName != NULL)
-        printf("\nClosing %s\n", fileName);
+    //if (fileName != NULL)
+        //printf("\nClosing %s\n", fileName);
     return (rmm.CloseFile(fh));
 }
 
@@ -482,25 +482,76 @@ RC Test1(void)
 //
 // Test2 tests adding a few records to a file.
 //
+#define filename "testrel2" // invalid filename
+#define fname "testrel3" // invalid filename
 RC Test2(void)
 {
     RC            rc;
-    RM_FileHandle fh;
+    RM_FileHandle fh1, fh2;
+    RM_FileScan fs;
+    RM_Record rec;
+    RID rid(1,0), rid2(2,1);
 
     printf("test2 starting ****************\n");
 
-    if ((rc = CreateFile(FILENAME, sizeof(TestRec))) ||
-        (rc = OpenFile(FILENAME, fh)) ||
-        (rc = AddRecs(fh, FEW_RECS)) ||
-        (rc = CloseFile(FILENAME, fh)))
-        return (rc);
+    cout<<"\ncreating file with recsize = 0\n";
+    if ((rc = CreateFile(fname, 0)))  RM_PrintError(rc);
+
+    cout<<"\ncreating file with recsize > PF_PAGE_SIZE\n";
+    if ((rc = CreateFile(fname, PF_PAGE_SIZE+1)))  RM_PrintError(rc);
+
+    cout<<"\ncreating file with invalid filename\n";
+    if ((rc = CreateFile("abc/abc", sizeof(TestRec))))  RM_PrintError(rc);
+
+    cout<<"\ncreating the same file twice\n";
+    if ((rc = CreateFile(fname, sizeof(TestRec))))  RM_PrintError(rc);
+    if ((rc = CreateFile(fname, sizeof(TestRec))))  RM_PrintError(rc);
+    
+    cout<<"\nopening file with invalid filename\n";
+    if ((rc = OpenFile("asda/asda", fh1)))  RM_PrintError(rc);
+    
+    cout<<"\ngetting first record of empty file\n";
+    void*    x;
+    RM_Record rec2;
+    if ((rc = OpenFile(fname, fh1)))  RM_PrintError(rc);
+    if ((rc = fs.OpenScan(fh1, INT, 4, 0, NE_OP, x, NO_HINT))) RM_PrintError(rc);
+    if ((rc = fs.GetNextRec(rec2))) RM_PrintError(rc);
+    if ((rc = fs.CloseScan()))  RM_PrintError(rc);
+    // if ((rc = fh1.GetRec(rid, rec2))) RM_PrintError(rc);
+    
+    cout<<  "\nremoving nonexistent record\n";
+    if ((rc = fh1.DeleteRec(rid2)))  RM_PrintError(rc);
+    
+    cout<<"\nadding record to unopened file handle\n";
+    TestRec trec;
+    char * temp_rec = (char*) &trec;
+    if ((rc = InsertRec(fh2, temp_rec, rid))) RM_PrintError(rc);
+
+    cout<<"\nremoving record from invalid file handle\n";
+    if ((rc = DeleteRec(fh2, rid))) RM_PrintError(rc);
+
+    cout<<"\ngetting first record with invalid file handle\n";
+    RM_Record rec1;
+    if ((rc = fh2.GetRec(rid, rec1))) RM_PrintError(rc);
+
+    cout<<"\nopening scan with invalid file handle\n";
+    if ((rc = fs.OpenScan(fh2, INT, 4, 0, NE_OP, x, NO_HINT))) RM_PrintError(rc);
 
 
-    LsFile(FILENAME);
+    cout<<"\ncalling RM_PrintError with corrupted return code\n";
+    RM_PrintError(9999);
 
-    if ((rc = DestroyFile(FILENAME)))
-        return (rc);
-    PF_Statistics();
+    TestRec t;
+    for (int i = 0; i < 1; i++) {
+        if ((rc = fh1.InsertRec((char*) &t, rid))) RM_PrintError(rc);
+    }
+    // for (int i = 0; i < 1000; i++) {
+        if ((rc = fh1.DeleteRec(rid))) RM_PrintError(rc);
+        if ((rc = fh1.DeleteRec(rid))) RM_PrintError(rc);
+    // }
+    if ((rc = CloseFile(fname, fh1)))  RM_PrintError(rc);
+    if ((rc = DestroyFile(fname))) RM_PrintError(rc);
+    
     printf("\ntest2 done ********************\n");
     return (0);
 }
