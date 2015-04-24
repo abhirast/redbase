@@ -675,7 +675,7 @@ RC Test4(void)
     err(OpenFile(FILENAME, fh));
     op = NO_OP;
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
-    PrintError(fs.GetNextRec(temp_rec));
+    //PrintError(fs.GetNextRec(temp_rec));
     err(fs.CloseScan());
 
     err(CloseFile(FILENAME, fh));
