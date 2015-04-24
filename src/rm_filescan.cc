@@ -47,6 +47,7 @@ RM_FileScan::~RM_FileScan() {
 	3. Store the passed parameters
 	4. Make the comp function pointer point to the correct member 
 	   function
+	TODO : Error if CLientHint invalid
 */
 RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
                   AttrType   attrType,
@@ -57,10 +58,23 @@ RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
                   ClientHint pinHint) {
 	// Set all the private members to initialize the scan
 	if (fileHandle.bIsOpen == 0) return RM_FILE_NOT_OPEN;
-	if (bIsOpen) return 100000;
-	if (compOp < NO_OP || compOp > GE_OP) return 100000;
+	// check if the scan is already open
+	if (bIsOpen) return RM_SCAN_OPEN_FAIL;
+	// check if the compOp is valid
+	if (compOp < NO_OP || compOp > GE_OP) return RM_SCAN_OPEN_FAIL;
+	// check if the attribute type is valid
+	if (attrType < INT || attrType > STRING) return RM_SCAN_OPEN_FAIL;
+	// check if attr length and attr type are consistent
+	if (attrType == INT && attrLength != 4
+		|| attrType == FLOAT && attrLength != 4
+		|| attrType == STRING && attrLength > MAXSTRINGLEN)
+		return RM_SCAN_OPEN_FAIL;
+
 	if (!value) compOp = NO_OP;
 	rm_fh = &fileHandle;
+	// check if attr length and offset are valid
+	if (rm_fh->fHdr.record_length < attrLength + attrOffset 
+		|| attrOffset < 0  || attrLength < 0 ) return RM_SCAN_OPEN_FAIL;
 	attr_offset = attrOffset;
 	attr_length = attrLength;
 	attr_type = attrType;

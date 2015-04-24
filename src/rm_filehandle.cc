@@ -72,7 +72,7 @@ RC RM_FileHandle::GetRec(const RID &rid, RM_Record &rec) const {
 RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	RC WARN = RM_INSERT_FAIL, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
-	if (!pData) return RM_INSERT_FAIL;
+	if (!pData) return RM_NULL_INSERT;
 	PF_PageHandle pf_ph;
 	int dest_page;
 	if (fHdr.first_free == RM_SENTINEL) {

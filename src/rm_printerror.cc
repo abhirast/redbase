@@ -22,6 +22,8 @@ static char *RM_WarnMsg[] = {
   (char*)"recoverable error while forcing pages to disk",
   (char*)"attempt to access a unopened scanner",
   (char*)"location out of page bounds",
+  (char*)"attempt to insert a null record",
+  (char*)"failure while opening scan, perhaps an invalid parameter",
   (char*)"end of file reached"
 };
 

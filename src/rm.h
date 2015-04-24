@@ -187,7 +187,9 @@ void RM_PrintError(RC rc);
 #define RM_FORCEPAGE_FAIL           (START_RM_WARN + 10)    
 #define RM_SCAN_NOT_OPEN            (START_RM_WARN + 11)    
 #define RM_PAGE_OVERFLOW            (START_RM_WARN + 12)
-#define RM_EOF                      (START_RM_WARN + 13)        
+#define RM_NULL_INSERT              (START_RM_WARN + 13)
+#define RM_SCAN_OPEN_FAIL           (START_RM_WARN + 14)
+#define RM_EOF                      (START_RM_WARN + 15)        
 #define RM_LASTWARN                 RM_EOF
 
 #define RM_MANAGER_CREATE_ERR       (START_RM_ERR - 0)

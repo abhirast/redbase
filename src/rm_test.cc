@@ -660,7 +660,7 @@ RC Test4(void)
 
     printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
-    op = (CompOp) 0;
+    op = (CompOp) 1;
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) {
@@ -680,6 +680,7 @@ RC Test4(void)
     err(fs.CloseScan());
 
     err(CloseFile(FILENAME, fh));
+    err(DestroyFile(FILENAME));
 
     // PF_Statistics();
     printf("\ntest4 done ********************\n");
