@@ -24,6 +24,7 @@ static char *RM_WarnMsg[] = {
   (char*)"location out of page bounds",
   (char*)"attempt to insert a null record",
   (char*)"failure while opening scan, perhaps an invalid parameter",
+  (char*)"file name invalid",
   (char*)"end of file reached"
 };
 
@@ -44,7 +45,7 @@ void RM_PrintError(RC rc)
     // Print warning
     cerr << "RM warning: " << RM_WarnMsg[rc - START_RM_WARN] << "\n";
   // Error codes are negative, so invert everything
-  else if (-rc >= -START_RM_ERR && -rc < -RM_LASTERROR)
+  else if (-rc >= -START_RM_ERR && -rc <= -RM_LASTERROR)
     // Print error
     cerr << "RM error: " << RM_ErrorMsg[-rc + START_RM_ERR] << "\n";
   else if (rc == 0)

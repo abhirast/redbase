@@ -40,7 +40,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
     if ((recordSize >= PF_PAGE_SIZE - (int) sizeof(RM_PageHdr)) || (recordSize <= 0)) {
         return RM_BAD_REC_SIZE;
     }
-    
+    if (!fileName) return RM_NULL_FILENAME;
     RM_ErrorForward(pf_manager->CreateFile(fileName));
     // define a file handle and page handles to open the file
     PF_FileHandle fh;
@@ -79,6 +79,7 @@ RC RM_Manager::CreateFile (const char *fileName, int recordSize) {
 */
 RC RM_Manager::DestroyFile(const char *fileName) {
     RC WARN = RM_MANAGER_DESTROY_WARN, ERR = RM_MANAGER_DESTROY_ERR; // used by macro
+    if (!fileName) return RM_NULL_FILENAME;
     RM_ErrorForward(pf_manager->DestroyFile(fileName));
     return OK_RC;
 }
@@ -98,6 +99,7 @@ RC RM_Manager::DestroyFile(const char *fileName) {
 */
 RC RM_Manager::OpenFile(const char *fileName, RM_FileHandle &fileHandle) {
     RC WARN = RM_MANAGER_OPEN_WARN, ERR = RM_MANAGER_OPEN_ERR; // used by macro
+    if (!fileName) return RM_NULL_FILENAME;
     if (fileHandle.bIsOpen) {
         RM_ErrorForward(1); // Positive number for warning
     }
