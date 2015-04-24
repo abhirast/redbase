@@ -660,7 +660,7 @@ RC Test4(void)
 
     printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
-    op = NO_OP;
+    op = (CompOp) 0;
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) {
@@ -670,12 +670,13 @@ RC Test4(void)
         //cout<<((TestRec*) result)->num<<endl;
     }
     cout<<"Deleted records : "<<count<<endl;
+    err(fs.CloseScan());
     err(rc = CloseFile(FILENAME, fh));
 
     err(OpenFile(FILENAME, fh));
     op = NO_OP;
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
-    //PrintError(fs.GetNextRec(temp_rec));
+    PrintError(fs.GetNextRec(temp_rec));
     err(fs.CloseScan());
 
     err(CloseFile(FILENAME, fh));

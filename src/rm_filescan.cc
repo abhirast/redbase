@@ -57,6 +57,8 @@ RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
                   ClientHint pinHint) {
 	// Set all the private members to initialize the scan
 	if (fileHandle.bIsOpen == 0) return RM_FILE_NOT_OPEN;
+	if (bIsOpen) return 100000;
+	if (compOp < NO_OP || compOp > GE_OP) return 100000;
 	if (!value) compOp = NO_OP;
 	rm_fh = &fileHandle;
 	attr_offset = attrOffset;
