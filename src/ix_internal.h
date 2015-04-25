@@ -6,7 +6,16 @@
 #ifndef IX_INT_H
 #define IX_INT_H
 
+enum IPageType {
+	INTERNAL,
+	LEAF,
+	OVERFLOW
+};
 
+struct IX_PageHdr {
+	int size;
+	IPageType type;
+};
 
 
 // Macro for error forwarding
