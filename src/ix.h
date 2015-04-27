@@ -184,6 +184,9 @@ void IX_PrintError(RC rc);
 #define IX_OVERFLOW_DELETE_WARN         (START_IX_WARN + 27)    
 #define IX_REC_NOT_FOUND                (START_IX_WARN + 28)    
 #define IX_NULL_KEY                     (START_IX_WARN + 29)
+#define IX_DUPLICATE_INSERT             (START_IX_WARN + 30)
+
+
 
 #define IX_MANAGER_CREATE_ERR           (START_IX_ERR - 0)
 #define IX_MANAGER_DESTROY_ERR          (START_IX_ERR - 1)

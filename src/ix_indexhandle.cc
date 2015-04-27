@@ -710,6 +710,12 @@ RC IX_IndexHandle::leafInsert(PF_PageHandle &ph, void *&pData,
 			}
 			// if there is no overflow page, simply put the key
 			else {
+				// check for duplicates
+				RID *temp_rid;
+				for (int i = index; i < pHdr->num_keys; i++) {
+					temp_rid = (RID*) (pointers + i * sizeof(RID));
+					if (*temp_rid == rid) return IX_DUPLICATE_INSERT;
+				}
 				arrayInsert(keys, pData, fHdr.attrLength, index, pHdr->num_keys);
 				arrayInsert(pointers, (void*) (&rid), sizeof(RID), index, pHdr->num_keys);
 				return OK_RC;
@@ -736,6 +742,12 @@ RC IX_IndexHandle::leafInsert(PF_PageHandle &ph, void *&pData,
 		else {
 			// if the key exists, create an overflow page
 			if (found) {
+				// check for duplicates
+				RID *temp_rid;
+				for (int i = 0; i < pHdr->num_keys; i++) {
+					temp_rid = (RID*) (pointers + i * sizeof(RID));
+					if (*temp_rid == rid) return IX_DUPLICATE_INSERT;
+				}
 				int opnum;
 				char* op_data;
 				IX_ErrorForward(createOverflow(page, opnum, op_data, pData));
@@ -774,15 +786,27 @@ RC IX_IndexHandle::overflowInsert(PF_PageHandle &ph, const RID &rid) {
 	char *rids = page + sizeof(IX_OverflowHdr);
 	// if the page has space, put it there
 	if (num_rids < fHdr.overflow_capacity) {
+		// check for duplicates
+		RID *temp_rid;
+		for (int i = 0; i < pHdr->num_rids; i++) {
+			temp_rid = (RID*) (rids + i * sizeof(RID));
+			if (*temp_rid == rid) return IX_DUPLICATE_INSERT;
+		}
 		RID* new_rid = (RID*) (rids	+ num_rids * sizeof(RID));
 		*new_rid = rid;
 		pHdr->num_rids++;
 		return OK_RC;	
 	}
+
 	// if the page has no space, create a new page and call function on it
 	else {
 		PF_PageHandle overflow_handle;
-		pf_fh.AllocatePage(overflow_handle);
+		if (pHdr->next_page == IX_SENTINEL) {
+			IX_ErrorForward(pf_fh.AllocatePage(overflow_handle));
+		}
+		else {
+			IX_ErrorForward(pf_fh.GetThisPage(pHdr->next_page, overflow_handle));
+		}
 		char* op_data;
 		int opnum;
 		IX_ErrorForward(overflow_handle.GetPageNum(opnum));
