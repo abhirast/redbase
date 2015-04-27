@@ -185,7 +185,7 @@ void IX_PrintError(RC rc);
 #define IX_REC_NOT_FOUND                (START_IX_WARN + 28)    
 #define IX_NULL_KEY                     (START_IX_WARN + 29)
 #define IX_DUPLICATE_INSERT             (START_IX_WARN + 30)
-
+#define IX_LASTWARN                     IX_DUPLICATE_INSERT
 
 
 #define IX_MANAGER_CREATE_ERR           (START_IX_ERR - 0)
@@ -203,9 +203,10 @@ void IX_PrintError(RC rc);
 #define IX_OPEN_SCAN_ERR                (START_IX_ERR - 12)                
 #define IX_SCAN_ERR                     (START_IX_ERR - 13)        
 #define IX_FORCEPAGE_ERR                (START_IX_ERR - 14)
-#define IX_DELETE_ERR                   (START_IX_WARN - 15)    
-#define IX_TREE_DELETE_ERR              (START_IX_WARN - 16)        
-#define IX_LEAF_DELETE_ERR              (START_IX_WARN - 17)                    
-#define IX_OVERFLOW_DELETE_ERR          (START_IX_WARN - 18)        
+#define IX_DELETE_ERR                   (START_IX_ERR - 15)    
+#define IX_TREE_DELETE_ERR              (START_IX_ERR - 16)        
+#define IX_LEAF_DELETE_ERR              (START_IX_ERR - 17)                    
+#define IX_OVERFLOW_DELETE_ERR          (START_IX_ERR - 18)        
+#define IX_LASTERROR                    IX_OVERFLOW_DELETE_ERR
 
 #endif

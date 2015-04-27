@@ -46,7 +46,6 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     // check if the compOp is valid
     if (compOp < NO_OP || compOp > GE_OP || compOp == NE_OP) 
         return IX_SCAN_INVALID_OPERATOR;
-    
     if (!value) compOp = NO_OP;
     ix_ih = &indexHandle;
     pf_fh = &(indexHandle.pf_fh);

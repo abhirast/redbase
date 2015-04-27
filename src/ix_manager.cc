@@ -47,7 +47,7 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo,
     // define a file handle and page handles to open the file
     PF_FileHandle fh;
     PF_PageHandle header;
-    IX_ErrorForward(pf_manager->OpenFile(fileName, fh));
+    IX_ErrorForward(pf_manager->OpenFile(fname, fh));
     IX_ErrorForward(fh.AllocatePage(header));
     // get the assigned page number
     PageNum header_pnum;
