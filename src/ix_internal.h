@@ -8,14 +8,28 @@
 
 enum IPageType {
 	INTERNAL,
-	LEAF,
-	OVERFLOW
+	LEAF
 };
 
-struct IX_PageHdr {
-	int size;
+struct IX_InternalHdr {
 	IPageType type;
+	int num_keys;
+	int left_pnum;
 };
+
+struct IX_LeafHdr {
+	IPageType type;
+	int num_keys;
+	int left_pnum;
+	int right_pnum;
+};
+
+struct IX_OverflowHdr {
+	int num_rids;
+	int next_page;
+};
+
+#define IX_SENTINEL -1
 
 
 // Macro for error forwarding

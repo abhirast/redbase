@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <iostream>
 #include <cstring>
-#include <cmath>
+// #include <cmath>
 #include "ix.h"
 #include "ix_internal.h"
 
@@ -59,12 +59,15 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo,
     IX_FileHdr fHdr;
     fHdr.attrLength = attrLength;
     fHdr.root_pnum = -1;
-    fHdr.leaf_capacity =  floor((PF_PAGE_SIZE - sizeof(IX_PageHdr))
-    						/ (sizeof(RID) + attrLength));
-    fHdr.non_leaf_capacity = floor((PF_PAGE_SIZE - sizeof(IX_PageHdr))
-    						/ (sizeof(PageNum) + attrLength));
+    fHdr.leaf_capacity =  numKeysPerPage(attrLength, sizeof(RID), 
+    						sizeof(IX_LeafHdr));
+    fHdr.internal_capacity = numKeysPerPage(attrLength, sizeof(PageNum), 
+    						sizeof(IX_InternalHdr));
+    // overflow page has only RIDs
+    fHdr.overflow_capacity = numKeysPerPage(0, sizeof(RID), sizeof(PageNum));
     fHdr.header_pnum = header_pnum;
-    memcpy(contents, &fHdr, sizeof(RM_FileHdr));
+    fHdr.attrType = attrType;
+    memcpy(contents, &fHdr, sizeof(IX_FileHdr));
     // unpin the header
     IX_ErrorForward(fh.UnpinPage(header_pnum));
     // RM_ErrorForward(fh.ForcePages(header_pnum));
@@ -81,7 +84,7 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo,
 RC IX_Manager::DestroyIndex(const char *fileName, int indexNo) {
 	// define default errors to be forwarded
 	RC WARN = IX_MANAGER_DESTROY_WARN, ERR = IX_MANAGER_DESTROY_ERR;
-    if (!fileName) return RM_NULL_FILENAME;
+    if (!fileName) return IX_NULL_FILENAME;
     char fname[MAXNAME + 10];
     sprintf(fname, "%s.%d", fileName, indexNo);
     IX_ErrorForward(pf_manager->DestroyFile(fname));
@@ -109,7 +112,7 @@ RC IX_Manager::OpenIndex(const char *fileName, int indexNo,
     IX_ErrorForward(pf_manager->OpenFile(fname, indexHandle.pf_fh));
     PF_PageHandle header;
     // First page is the header page 
-    IX_ErrorForward(fileHandle.pf_fh.GetFirstPage(header));
+    IX_ErrorForward(indexHandle.pf_fh.GetFirstPage(header));
     char *data;
     IX_ErrorForward(header.GetData(data));
     memcpy(&indexHandle.fHdr, data, sizeof(IX_FileHdr));
@@ -146,9 +149,20 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle) {
         // unpin the header
         IX_ErrorForward(indexHandle.pf_fh.UnpinPage(header_pnum));
     }
-    IX_ErrorForward(indexHandle.ForcePages(ALL_PAGES));
+    IX_ErrorForward(indexHandle.ForcePages());
     IX_ErrorForward(pf_manager->CloseFile(indexHandle.pf_fh));
     indexHandle.bIsOpen = 0;
     indexHandle.bHeaderChanged = 0;
     return OK_RC;
+}
+
+/*  Function to figure out how many keys can reside in a page. Each
+	page contains a page header, x keys and (x+1) pointers. This 
+	function calculates the maximum possible value of x.
+*/
+int IX_Manager::numKeysPerPage(int key_size, int pointer_size, int header) {
+    int num = 0;
+    int effective_psize = PF_PAGE_SIZE - header;
+    while (num * (key_size + pointer_size) <= effective_psize) num++;
+    return num - 1;
 }
