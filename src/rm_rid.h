@@ -37,6 +37,7 @@ public:
     ~RID();                                        // Destructor
     RID(const RID &rid);						   // Copy constructor
     RID& operator=(const RID &rid);				   // Assignment operator
+    bool operator==(const RID &rid) const;         // Equality operator
     RC GetPageNum(PageNum &pageNum) const;         // Return page number
     RC GetSlotNum(SlotNum &slotNum) const;         // Return slot number
 

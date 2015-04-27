@@ -35,6 +35,9 @@ RID& RID::operator=(const RID &rid) {
 	return (*this);
 }
 
+bool RID::operator==(const RID &rid) const {
+	return (this->pageNum == rid.pageNum) && (this->slotNum == rid.slotNum);
+}
 
 // Return page number
 RC RID::GetPageNum(PageNum &pageNum) const {
