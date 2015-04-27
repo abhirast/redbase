@@ -32,10 +32,13 @@ using namespace std;
 
 
 IX_IndexHandle::IX_IndexHandle() {
-
+	bIsOpen = 0;
+	bHeaderChanged = 0;
 }
-IX_IndexHandle::~IX_IndexHandle() {
 
+
+IX_IndexHandle::~IX_IndexHandle() {
+	// nothing to do
 }
 
 /*	Steps-
@@ -105,13 +108,19 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
 	return WARN; //should not reach here
 }
 
-// Delete a new index entry
+/* 
+Delete a new index entry.
+Steps - 
+*/
 RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid) {
 	return OK_RC;
 }
 
 // Force index files to disk
 RC IX_IndexHandle::ForcePages() {
+	RC WARN = IX_FORCEPAGE_WARN, ERR = IX_FORCEPAGE_ERR;
+	if (!bIsOpen) return IX_INDEX_CLOSED;
+	IX_ErrorForward(pf_fh.ForcePages(ALL_PAGES));
 	return OK_RC;
 }
 
@@ -123,7 +132,7 @@ RC IX_IndexHandle::ForcePages() {
 
 
 // copies the contents into char array and null terminates it
-void IX_IndexHandle::buffer(void *ptr, char* buff) {
+void IX_IndexHandle::buffer(void *ptr, char* buff) const{
     buff[fHdr.attrLength] = '\0';
     memcpy(buff, ptr, fHdr.attrLength);
     return;
@@ -131,29 +140,29 @@ void IX_IndexHandle::buffer(void *ptr, char* buff) {
 
 
 // operators for comparison
-bool IX_IndexHandle::eq_op(void* attr1, void* attr2) {
+bool IX_IndexHandle::eq_op(void* attr1, void* attr2) const{
 	IX_operator(==);
 }
-bool IX_IndexHandle::ne_op(void* attr1, void* attr2) {
+bool IX_IndexHandle::ne_op(void* attr1, void* attr2) const{
 	IX_operator(!=);
 }
-bool IX_IndexHandle::lt_op(void* attr1, void* attr2) {
+bool IX_IndexHandle::lt_op(void* attr1, void* attr2) const{
 	IX_operator(<);
 }
-bool IX_IndexHandle::gt_op(void* attr1, void* attr2) {
+bool IX_IndexHandle::gt_op(void* attr1, void* attr2) const{
 	IX_operator(>);
 }
-bool IX_IndexHandle::le_op(void* attr1, void* attr2) {
-	IX_operator(<=);
+bool IX_IndexHandle::le_op(void* attr1, void* attr2) const{
+	IX_operator(<=);	
 }
-bool IX_IndexHandle::ge_op(void* attr1, void* attr2) {
+bool IX_IndexHandle::ge_op(void* attr1, void* attr2) const{
 	IX_operator(>=);
 }
 
 /*  Sets res to the index of the first key >= query. Sets it
 	to cap if all keys are smaller than query
 */
-bool IX_IndexHandle::findKey(char* keys, void* query, int cap, int& res) {
+bool IX_IndexHandle::findKey(char* keys, void* query, int cap, int& res) const {
 	bool found = false;
 	void *ptr;
 	for (res = 0; res < cap; res++) {

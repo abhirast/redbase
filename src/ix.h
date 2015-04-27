@@ -32,6 +32,7 @@ struct IX_FileHdr {
 //
 class IX_IndexHandle {
     friend class IX_Manager;
+    friend class IX_IndexScan;
 public:
     IX_IndexHandle();
     ~IX_IndexHandle();
@@ -49,14 +50,14 @@ private:
     PF_FileHandle pf_fh;
     IX_FileHdr fHdr;
     int bHeaderChanged;
-    void buffer(void *ptr, char* buff);
-    bool eq_op(void* attr1, void* attr2);
-    bool ne_op(void* attr1, void* attr2);
-    bool lt_op(void* attr1, void* attr2);
-    bool gt_op(void* attr1, void* attr2);
-    bool ge_op(void* attr1, void* attr2);
-    bool le_op(void* attr1, void* attr2);
-    bool findKey(char* keys, void* query, int cap, int& res);
+    void buffer(void *ptr, char* buff) const;
+    bool eq_op(void* attr1, void* attr2) const;
+    bool ne_op(void* attr1, void* attr2) const;
+    bool lt_op(void* attr1, void* attr2) const;
+    bool gt_op(void* attr1, void* attr2) const;
+    bool ge_op(void* attr1, void* attr2) const;
+    bool le_op(void* attr1, void* attr2) const;
+    bool findKey(char* keys, void* query, int cap, int& res) const;
     void shiftBytes(char* beg, int unit_size, int num_units, int shift_units);
     int checkDuplicates(char* keys, int num_keys, int &most_repeated_index);
     void arrayInsert(char* array, void* data, int size, int index, int cap);
@@ -89,6 +90,33 @@ public:
 
     // Close index scan
     RC CloseScan();
+private:
+    const PF_FileHandle *pf_fh;
+    const IX_IndexHandle *ix_ih;
+    IX_FileHdr fHdr;
+    int bIsOpen;
+    char *query_value;
+    ClientHint pin_hint;
+    bool found;
+    bool onOverflow;
+    int current_leaf;
+    int next_leaf;
+    int current_overflow;
+    int leaf_index;
+    int overflow_index;
+    int root_pnum;
+
+    // pointer to a member function
+    bool (IX_IndexScan::*comp)(void* attr);
+    
+    // Functions for comparison
+    void buffer(void *ptr, char* buff);
+    bool no_op(void* attr);
+    bool eq_op(void* attr);
+    bool lt_op(void* attr);
+    bool gt_op(void* attr);
+    bool le_op(void* attr);
+    bool ge_op(void* attr);
 };
 
 //
@@ -139,7 +167,15 @@ void IX_PrintError(RC rc);
 #define IX_PAGE_TYPE_ERROR              (START_IX_WARN + 13)
 #define IX_INSERT_WARN                  (START_IX_WARN + 14)          
 #define IX_INVALID_INSERT_PARAM         (START_IX_WARN + 15)        
-#define IX_INDEX_CLOSED                 (START_IX_WARN + 16)        
+#define IX_INDEX_CLOSED                 (START_IX_WARN + 16)
+#define IX_OPEN_SCAN_WARN               (START_IX_WARN + 17)
+#define IX_SCAN_OPEN_FAIL               (START_IX_WARN + 18)    
+#define IX_SCAN_INVALID_OPERATOR        (START_IX_WARN + 19)        
+#define IX_SCAN_WARN                    (START_IX_WARN + 20)            
+#define IX_EOF                          (START_IX_WARN + 21)                    
+#define IX_SCAN_CLOSED                  (START_IX_WARN + 22)    
+#define IX_FORCEPAGE_WARN               (START_IX_WARN + 23)
+
 
 #define IX_MANAGER_CREATE_ERR           (START_IX_ERR - 0)
 #define IX_MANAGER_DESTROY_ERR          (START_IX_ERR - 1)
@@ -153,5 +189,8 @@ void IX_PrintError(RC rc);
 #define IX_OVER_INSERT_ERR              (START_IX_ERR - 9)    
 #define IX_TREE_INSERT_ERR              (START_IX_ERR - 10)
 #define IX_INSERT_ERR                   (START_IX_ERR - 11)        
+#define IX_OPEN_SCAN_ERR                (START_IX_ERR - 12)                
+#define IX_SCAN_ERR                     (START_IX_ERR - 13)        
+#define IX_FORCEPAGE_ERR                (START_IX_ERR - 14)
 
 #endif
