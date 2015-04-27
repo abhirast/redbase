@@ -68,6 +68,9 @@ private:
     RC leafInsert(PF_PageHandle &ph, void *&pData, const RID &rid, int& newpage);
     RC overflowInsert(PF_PageHandle &ph, const RID &rid);
     RC treeInsert(PF_PageHandle &ph, void *&pData, const RID &rid, int& newpage);    
+    RC treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, int& numKeys);
+    RC leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, int& numKeys);
+    RC overflowDelete(PF_PageHandle &ph, const RID& rid, int& numKeys);
 };
 
 //
@@ -175,7 +178,12 @@ void IX_PrintError(RC rc);
 #define IX_EOF                          (START_IX_WARN + 21)                    
 #define IX_SCAN_CLOSED                  (START_IX_WARN + 22)    
 #define IX_FORCEPAGE_WARN               (START_IX_WARN + 23)
-
+#define IX_DELETE_WARN                  (START_IX_WARN + 24)    
+#define IX_TREE_DELETE_WARN             (START_IX_WARN + 25)    
+#define IX_LEAF_DELETE_WARN             (START_IX_WARN + 26)    
+#define IX_OVERFLOW_DELETE_WARN         (START_IX_WARN + 27)    
+#define IX_REC_NOT_FOUND                (START_IX_WARN + 28)    
+#define IX_NULL_KEY                     (START_IX_WARN + 29)
 
 #define IX_MANAGER_CREATE_ERR           (START_IX_ERR - 0)
 #define IX_MANAGER_DESTROY_ERR          (START_IX_ERR - 1)
@@ -192,5 +200,9 @@ void IX_PrintError(RC rc);
 #define IX_OPEN_SCAN_ERR                (START_IX_ERR - 12)                
 #define IX_SCAN_ERR                     (START_IX_ERR - 13)        
 #define IX_FORCEPAGE_ERR                (START_IX_ERR - 14)
+#define IX_DELETE_ERR                   (START_IX_WARN - 15)    
+#define IX_TREE_DELETE_ERR              (START_IX_WARN - 16)        
+#define IX_LEAF_DELETE_ERR              (START_IX_WARN - 17)                    
+#define IX_OVERFLOW_DELETE_ERR          (START_IX_WARN - 18)        
 
 #endif

@@ -113,6 +113,19 @@ Delete a new index entry.
 Steps - 
 */
 RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid) {
+	RC WARN = IX_DELETE_WARN, ERR = IX_DELETE_ERR;
+	if (!pData) return IX_NULL_KEY;
+	if (!bIsOpen) return IX_INDEX_CLOSED;
+	if (fHdr.root_pnum < 0) return IX_REC_NOT_FOUND;
+	// get the root page
+	PF_PageHandle root_handle;
+	int numKeys;
+	IX_ErrorForward(pf_fh.GetThisPage(fHdr.root_pnum, root_handle));
+	WARN = IX_REC_NOT_FOUND;
+	IX_ErrorForward(treeDelete(root_handle, pData, rid, numKeys));
+	WARN = IX_DELETE_WARN;
+	// the root page is never deleted even if it becomes empty
+	IX_ErrorForward(pf_fh.UnpinPage(fHdr.root_pnum));
 	return OK_RC;
 }
 
@@ -130,6 +143,218 @@ RC IX_IndexHandle::ForcePages() {
 // Private methods
 //
 
+
+RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, int& numKeys) {
+	RC WARN = IX_TREE_DELETE_WARN, ERR = IX_TREE_DELETE_ERR;
+	char *data;
+	IX_ErrorForward(ph.GetData(data));
+	IX_InternalHdr *pHdr = (IX_InternalHdr*) data;
+	// base case, leaf reached
+	if (pHdr->type == LEAF) {
+		WARN = IX_REC_NOT_FOUND;
+		IX_ErrorForward(leafDelete(ph, pData, rid, numKeys));
+		WARN = IX_TREE_DELETE_WARN;
+		return OK_RC;
+	}
+	char *keys = data + sizeof(IX_InternalHdr);
+	char *pointers = keys + fHdr.attrLength * fHdr.internal_capacity;
+	int index;
+	bool found = findKey(keys, pData, pHdr->num_keys, index);
+	// call the function on the appropriate page
+	PageNum child_pnum;
+	int page_called;
+	if (found) {
+		// the pointer index is correct
+		memcpy(&child_pnum, pointers + index * sizeof(PageNum), sizeof(PageNum));
+		page_called = index;
+	} else if (index == 0) {
+		child_pnum = pHdr->left_pnum;
+		page_called = -1;
+	} else {
+		index--;
+		memcpy(&child_pnum, pointers + index * sizeof(PageNum), sizeof(PageNum));
+		page_called = index;
+	}
+
+	// get the appropriate child and call the function
+	PF_PageHandle cph;
+	IX_ErrorForward(pf_fh.GetThisPage(child_pnum, cph));
+	WARN = IX_REC_NOT_FOUND;
+	IX_ErrorForward(treeDelete(cph, pData, rid, numKeys));
+	WARN = IX_TREE_DELETE_WARN;
+	IX_ErrorForward(pf_fh.UnpinPage(child_pnum));
+	if (numKeys == 0) {
+		// dispose the child page
+		IX_ErrorForward(pf_fh.DisposePage(child_pnum));
+		// remove from the current page too
+		if (page_called == -1) {
+			memcpy(&(pHdr->left_pnum), pointers, sizeof(PageNum));
+			page_called = 0;
+		}
+		// delete the key and pointer at index page_called
+		if (page_called < pHdr->num_keys - 1) {
+			index = page_called + 1;
+			int to_shift = pHdr->num_keys - index;
+			shiftBytes(keys + index * fHdr.attrLength, 
+						fHdr.attrLength, to_shift, -1);
+			shiftBytes(pointers + index * sizeof(PageNum), 
+							sizeof(PageNum), to_shift, -1);	
+		}
+		pHdr->num_keys--;
+	}
+	numKeys = pHdr->num_keys;
+	return OK_RC;
+}
+
+/*
+Iterate through all the keys, if key mathches, check rid. If rid denotes 
+overflow, call on overflow.
+*/
+RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, int& numKeys) {
+	RC WARN = IX_LEAF_DELETE_WARN, ERR = IX_LEAF_DELETE_ERR;
+	char *data;
+	IX_ErrorForward(ph.GetData(data));
+	IX_LeafHdr *pHdr = (IX_LeafHdr*) data;
+	char *keys = data + sizeof(IX_LeafHdr);
+	char *rids = keys + fHdr.attrLength * fHdr.leaf_capacity;
+	int index;
+	bool found = findKey(keys, pData, pHdr->num_keys, index);
+	if (!found) return IX_REC_NOT_FOUND;
+	// get the rid of the found key
+	RID* cand = (RID*) (rids + index * sizeof(RID));
+	int page, slot;
+	IX_ErrorForward(cand->GetPageNum(page));
+	IX_ErrorForward(cand->GetSlotNum(slot));
+	if (slot < 0) {
+		// found key has an overflow page
+		PF_PageHandle nextph;
+		IX_ErrorForward(pf_fh.GetThisPage(page, nextph));
+		WARN = IX_REC_NOT_FOUND;
+		IX_ErrorForward(overflowDelete(nextph, rid, numKeys));
+		WARN = IX_LEAF_DELETE_WARN;
+		IX_ErrorForward(pf_fh.UnpinPage(page));
+		if (numKeys == 0) {
+			// delete entry from the leaf
+			if (index < pHdr->num_keys - 1) {
+				index += 1;
+				int to_shift = pHdr->num_keys - index;
+				shiftBytes(keys + index * fHdr.attrLength, 
+							fHdr.attrLength, to_shift, -1);
+				shiftBytes(rids + index * sizeof(RID), 
+								sizeof(RID), to_shift, -1);	
+			}
+			pHdr->num_keys--;
+			// delete the overflow page
+			pf_fh.DisposePage(page);
+			return OK_RC;
+		}
+		else {
+			return OK_RC;
+		}
+	} 
+	else {
+		// found key not an overflow key
+		found = false;
+		for (int i = index; i < pHdr->num_keys; i++) {
+			if (ne_op(pData, (void*)(keys + i * fHdr.attrLength))) break;
+			// check if the rid is equal
+			RID* temp_rid = (RID*) (rids + i * fHdr.attrLength);
+			if (*temp_rid == rid) {
+				found = true;
+				if (i < pHdr->num_keys - 1) {
+					i += 1;
+					int to_shift = pHdr->num_keys - i;
+					shiftBytes(keys + i * fHdr.attrLength, 
+							fHdr.attrLength, to_shift, -1);
+					shiftBytes(rids + i * sizeof(RID), sizeof(RID), 
+								to_shift, -1);	
+				}
+				pHdr->num_keys--;
+				break;
+			}
+		}
+		if (!found) return IX_REC_NOT_FOUND;
+	}
+	if (pHdr->num_keys == 0) {
+		// update the pointers of the nearby pages
+		PF_PageHandle newph;
+		char *newdata;
+		IX_ErrorForward(pf_fh.GetThisPage(pHdr->left_pnum, newph));
+		IX_ErrorForward(newph.GetData(newdata));
+		IX_LeafHdr* newpHdr = (IX_LeafHdr*) newdata;
+		newpHdr->right_pnum = pHdr->right_pnum;
+		IX_ErrorForward(pf_fh.UnpinPage(pHdr->left_pnum));
+		IX_ErrorForward(pf_fh.GetThisPage(pHdr->right_pnum, newph));
+		IX_ErrorForward(newph.GetData(newdata));
+		newpHdr = (IX_LeafHdr*) newdata;
+		newpHdr->left_pnum = pHdr->left_pnum;
+		IX_ErrorForward(pf_fh.UnpinPage(pHdr->right_pnum));
+	}
+	// will be deleted by the parent if no. of keys is 0
+	numKeys = pHdr->num_keys;
+	return OK_RC;
+}
+
+RC IX_IndexHandle::overflowDelete(PF_PageHandle &ph, const RID& rid, int& numKeys) {
+	RC WARN = IX_OVERFLOW_DELETE_WARN, ERR = IX_OVERFLOW_DELETE_ERR;
+	char *data;
+	IX_ErrorForward(ph.GetData(data));
+	IX_OverflowHdr* pHdr = (IX_OverflowHdr*) data;
+	char* rids = data + sizeof(IX_OverflowHdr);
+
+	// find the key and delete it
+	bool found;
+	RID* ptr;
+	for (int i = 0; i < pHdr->num_rids; i++) {
+		ptr = (RID*) (rids + i * sizeof(RID));
+		if (*ptr == rid) {
+			found = true;
+			if (i < pHdr->num_rids - 1) {
+				i += 1;
+				int to_shift = pHdr->num_rids - i;
+				shiftBytes(rids + i * sizeof(RID), sizeof(RID), to_shift, -1);	
+			}
+			pHdr->num_rids--;
+			break;
+		}
+	}
+	// if key not found
+	if (!found) {
+		// if this is the last page
+		if(pHdr->next_page == IX_SENTINEL) {
+			return IX_REC_NOT_FOUND;
+		}
+		// call on the next page
+		PF_PageHandle nextph;
+		IX_ErrorForward(pf_fh.GetThisPage(pHdr->next_page, nextph));
+		WARN = IX_REC_NOT_FOUND;
+		IX_ErrorForward(overflowDelete(nextph, rid, numKeys));
+		WARN = IX_OVERFLOW_DELETE_WARN;
+		IX_ErrorForward(pf_fh.UnpinPage(pHdr->next_page));
+		if (numKeys == 0) {
+			// next page has become empty, delete it
+			IX_ErrorForward(pf_fh.DisposePage(pHdr->next_page));
+		}
+		return OK_RC;
+	}
+	// if key is found, it got deleted
+	if (pHdr->num_rids == 0) {
+		// if page got empty
+		if (pHdr->next_page != IX_SENTINEL) {
+			// if next page exists, copy its contents and delete the next page
+			PF_PageHandle nextph;
+			char *nextdata;
+			int nextpnum = pHdr->next_page;
+			IX_ErrorForward(pf_fh.GetThisPage(nextpnum, nextph));
+			IX_ErrorForward(nextph.GetData(nextdata));
+			memcpy(data, nextdata, PF_PAGE_SIZE);
+			pf_fh.DisposePage(nextpnum);
+		}
+		// header automatically got updated as everything was copied
+	}
+	numKeys = pHdr->num_rids;
+	return OK_RC;
+}
 
 // copies the contents into char array and null terminates it
 void IX_IndexHandle::buffer(void *ptr, char* buff) const{
