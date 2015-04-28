@@ -107,6 +107,7 @@ private:
     int current_overflow;
     int leaf_index;
     int overflow_index;
+    CompOp comp_op;
     
     // pointer to a member function
     bool (IX_IndexScan::*comp)(void* attr);

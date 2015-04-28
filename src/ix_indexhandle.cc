@@ -277,7 +277,7 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 		for (int i = index; i < pHdr->num_keys; i++) {
 			if (ne_op(pData, (void*)(keys + i * fHdr.attrLength))) break;
 			// check if the rid is equal
-			RID* temp_rid = (RID*) (rids + i * fHdr.attrLength);
+			RID* temp_rid = (RID*) (rids + i * sizeof(RID));
 			if (*temp_rid == rid) {
 				found = true;
 				if (i < pHdr->num_keys - 1) {

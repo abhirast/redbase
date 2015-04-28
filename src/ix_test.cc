@@ -216,10 +216,10 @@ RC InsertIntEntries(IX_IndexHandle &ih, int nEntries)
    int i;
    int value;
 
-   printf("             Adding %d int entries\n", nEntries);
+   printf("Adding %d int entries\n", nEntries);
    ran(nEntries);
    for(i = 0; i < nEntries; i++) {
-      cout<<value<<"\n";
+      cout<<"Adding key "<<value<<"\n";
       value = values[i] + 1;
       RID rid(value, value*2);
       if ((rc = ih.InsertEntry((void *)&value, rid)))
@@ -435,7 +435,7 @@ RC VerifyIntIndex(IX_IndexHandle &ih, int nStart, int nEntries, int bExists)
 
    for (i = nStart; i < nStart + nEntries; i++) {
       int value = values[i] + 1;
-
+      cout<<"Verifying entry "<<value<<endl;
       if ((rc = scan.OpenScan(ih, EQ_OP, &value))) {
          printf("Verify error: opening scan\n");
          return (rc);

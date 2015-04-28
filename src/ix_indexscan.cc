@@ -47,6 +47,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     if (compOp < NO_OP || compOp > GE_OP || compOp == NE_OP) 
         return IX_SCAN_INVALID_OPERATOR;
     if (!value) compOp = NO_OP;
+    comp_op = compOp;
     ix_ih = &indexHandle;
     pf_fh = &(indexHandle.pf_fh);
     fHdr = indexHandle.fHdr;
@@ -153,6 +154,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
     if (!bIsOpen) return IX_SCAN_CLOSED;
     if (!found) return IX_EOF;
     PF_PageHandle ph;
+    cout<<"leaf index is "<<leaf_index<<endl;
     // if currently on an overflow page
     if (onOverflow) {
         // get the overflow page
@@ -218,18 +220,19 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
             IX_ErrorForward(GetNextEntry(rid));
             return OK_RC;
         } 
+        leaf_index++;
         // if leaf finished
         if (leaf_index == pHdr->num_keys) {
             if (next_leaf == IX_SENTINEL) {
                 // unpin page, end of scan
-                IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
-                return IX_EOF;
+                // IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
+                found = false;
             }
+            if (comp_op == EQ_OP) found = false;
             current_leaf = next_leaf;
             leaf_index = 0;
             onOverflow = false;
         }
-        leaf_index++;
         IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
         return OK_RC;
     }
