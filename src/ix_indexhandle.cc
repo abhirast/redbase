@@ -76,6 +76,9 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
 	}
 	// insert into the root
 	int newpage;
+	char *data;
+	IX_ErrorForward(root_handle.GetData(data));
+	IPageType type = *((IPageType*) data);
 	IX_ErrorForward(treeInsert(root_handle, pData, rid, newpage));
 	IX_ErrorForward(pf_fh.UnpinPage(fHdr.root_pnum));
 	if (newpage < 0) {
@@ -152,6 +155,11 @@ RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 	char *data;
 	IX_ErrorForward(ph.GetData(data));
 	IX_InternalHdr *pHdr = (IX_InternalHdr*) data;
+
+	if (pHdr->num_keys == 0) {
+		cout<<"empty page\n";
+		return IX_REC_NOT_FOUND;
+	}
 	// base case, leaf reached
 	if (pHdr->type == LEAF) {
 		WARN = IX_REC_NOT_FOUND;
@@ -186,6 +194,7 @@ RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 	IX_ErrorForward(treeDelete(cph, pData, rid, numKeys));
 	WARN = IX_TREE_DELETE_WARN;
 	IX_ErrorForward(pf_fh.UnpinPage(child_pnum));
+	/*
 	if (numKeys == 0) {
 		// dispose the child page
 		IX_ErrorForward(pf_fh.DisposePage(child_pnum));
@@ -208,6 +217,7 @@ RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 		}
 		pHdr->num_keys--;
 	}
+	*/
 	numKeys = pHdr->num_keys;
 	return OK_RC;
 }
@@ -287,6 +297,7 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 	int temp_pnum;
 	IX_ErrorForward(ph.GetPageNum(temp_pnum));
 	IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
+	/*
 	if (pHdr->num_keys == 0) {
 		// update the pointers of the nearby pages
 		PF_PageHandle newph;
@@ -303,6 +314,7 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 		IX_ErrorForward(pf_fh.UnpinPage(pHdr->right_pnum));
 	}
 	// will be deleted by the parent if no. of keys is 0
+	*/
 	pHdr->num_keys--;
 	numKeys = pHdr->num_keys;
 	return OK_RC;
@@ -481,10 +493,12 @@ RC IX_IndexHandle::splitLeaf(char* page, int pnum, void* &pData,
 	
 	// allocate a new page
 	PF_PageHandle newph;
-	pf_fh.AllocatePage(newph);
+	IX_ErrorForward(pf_fh.AllocatePage(newph));
+	
 	char* newdata;
-	PageNum newpnum;
+	int newpnum;
 	IX_ErrorForward(newph.GetPageNum(newpnum));
+	
 	IX_ErrorForward(newph.GetData(newdata));
 	char *newkeys, *newpointers;
 	newkeys = newdata + sizeof(IX_LeafHdr);
@@ -602,7 +616,7 @@ RC IX_IndexHandle::splitInternal(char* page, void* &pData,
 		pHdr->num_keys++;
 	} else {
 		// insert in the new page
-		index -= (tokeep + 1);
+		index -= tokeep;
 		arrayInsert(newkeys, (void*) pData, fHdr.attrLength, index, togive);
 		arrayInsert(newpointers, (void*) &newpagenum, sizeof(PageNum), index, togive);
 		newpHdr->num_keys++;
@@ -919,6 +933,7 @@ RC IX_IndexHandle::treeInsert(PF_PageHandle &ph, void *&pData,
 		PF_PageHandle cph;
 		IX_ErrorForward(pf_fh.GetThisPage(child_pnum, cph));
 		IX_ErrorForward(treeInsert(cph, pData, rid, newpage));
+		IX_ErrorForward(pf_fh.UnpinPage(child_pnum));
 		// no new page allocated on the lower level
 		if (newpage < 0) {
 			return OK_RC;
