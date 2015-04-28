@@ -1,3 +1,28 @@
+# ix_DOC #
+
+#### Index layout ####
+The first page of the index file contains the file header which contains useful information about the index which is common to all the pages. The page header stores (i) key length, (ii) page number of root (iii) maximum number of keys that internal pages can hold, (iv) maximum number of keys that leaf pages can hold (v) maximum number of RIDs that overflow pages can hold (vi) page number of header (vii) indexed attribute type.
+
+Three different types of pages can be found in the index - INTERNAL pages, LEAF pages and OVERFLOW pages. The RIDs are stored in LEAF and OVERFLOW pages only. The INTERNAL pages direct the search so that we can reach the appropriate LEAF page and then an OVERFLOW page if applicable. All pages keep the count of number of keys/pointers contained in them in their page header.
+
+The INTERNAL pages are all the non-leaf tree pages. They contain n keys and (n+1) page numbers of their child pages which may be another INTERNAL page or a LEAF page. The LEAF pages contain m (key, RID) pairs and page numbers of left and right leaf pages. If any of these pages don't exist (for left-most and right-most leaf), the corresponding page number is set to IX_SENTINEL. An OVERFLOW page corresponds to a single key and hence it only stores the RIDs. As a result of this design, the three types of pages can accommodate different number of keys/RIDs. This helps us to do a very good utilization of pages, achieving a higher fan-out.
+
+#### Inserting into index ####
+When an index file is created, no root is allocated to it. When the first insertion is done, a root page gets allocated and it is considered to be of the type LEAF and hence it stores RIDs too. As more records are inserted, this LEAF page reaches it maximum capacity and then it needs to be split. Another LEAF page is allocated and half the keys of the original page are moved to it. To direct the searches to the two pages, an INTERNAL page is allocated. The INTERNAL page contains the minimum key of the newly allocated LEAF page. Subsequent inserts lead to creation of more LEAF pages and for each newly generated LEAF page, a key and page number is inserted in its parent. When the parent reaches its maximum capacity, it splits resulting in creation of an INTERNAL page and the key, page number insertion in the parent is recursively carried out. Due to the elegant recursive definition of the algorithm, I have implemented it recursively as well. I have written different functions which carry out individual steps such as splitting a page, creating a new page, inserting an entry into a page etc.
+
+#### Handling duplicates ####
+
+Duplicates keys may exist in the same LEAF page or in OVERFLOW pages. If a duplicate key is inserted in a LEAF page which has space, the (key, RID) pair is inserted in the LEAF page and no OVERFLOW page is allocated. When a page becomes full and we want to insert a new (key, RID) pair in it, we might need to split it to create space. But prior to considering a split, it is checked whether the LEAF page contains any duplicate keys and if it does, an OVERFLOW page is created for the key with the highest frequency in the LEAF. All the RIDs for this key are then moved to the overflow page. A single copy of the key is kept in the LEAF page having a dummy RID whose page number denotes the first page OVERFLOW page and the slot number is set to a negative value to indicate the presence of an OVERFLOW page. Thus splits can be avoided if duplicate keys exist in the same LEAF page. Also, as a result of this design, the same key can't exist in two different LEAF pages, avoiding the complication of keeping null pointer in parents to indicate such cases. Keeping duplicates in the LEAF helps us to avoid an extra IO if there is space in the LEAF.
+
+#### Deleting from index ####
+The tree structure is not changed during deletion. 
+
+#### Pinning Strategy ####
+
+#### Debugging ####
+ Valgrind, DDD
+
+
 # rm_DOC #
 
 #### File and Page Layout ####
