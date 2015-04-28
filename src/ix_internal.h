@@ -37,7 +37,7 @@ struct IX_OverflowHdr {
 #define IX_ErrorForward(expr) do { \
 RC tmp_rc = (expr);\
 if (tmp_rc != OK_RC) \
-        return ((tmp_rc > 0) ? WARN : ERR); \
+		return ((tmp_rc > 0) ? WARN : ERR); \
 } while (0)
 
 

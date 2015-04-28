@@ -49,6 +49,7 @@ IX_IndexHandle::~IX_IndexHandle() {
 	5. else, create a new root, with pData in it
 	6. Update the file header
 */
+    
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
 	RC WARN = IX_INSERT_WARN, ERR = IX_INSERT_ERR;
 	if (!pData) return IX_INVALID_INSERT_PARAM;
@@ -62,6 +63,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
 		PageNum newpnum;
 		IX_ErrorForward(root_handle.GetPageNum(newpnum));
 		IX_ErrorForward(root_handle.GetData(newdata));
+		IX_ErrorForward(pf_fh.MarkDirty(newpnum));
 		IX_LeafHdr* pHdr = (IX_LeafHdr*) newdata;
 		fHdr.root_pnum = newpnum;
 		bHeaderChanged = 1;
@@ -88,6 +90,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid) {
 		PageNum newpnum;
 		IX_ErrorForward(new_root.GetPageNum(newpnum));
 		IX_ErrorForward(new_root.GetData(newdata));
+		IX_ErrorForward(pf_fh.MarkDirty(newpnum));
 		IX_InternalHdr* pHdr = (IX_InternalHdr*) newdata;
 		keys = newdata + sizeof(IX_InternalHdr);
 		pointers = keys + fHdr.attrLength * fHdr.internal_capacity;
@@ -186,6 +189,9 @@ RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 	if (numKeys == 0) {
 		// dispose the child page
 		IX_ErrorForward(pf_fh.DisposePage(child_pnum));
+		int temp_pnum;
+		IX_ErrorForward(ph.GetPageNum(temp_pnum));
+		IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
 		// remove from the current page too
 		if (page_called == -1) {
 			memcpy(&(pHdr->left_pnum), pointers, sizeof(PageNum));
@@ -234,6 +240,9 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 		WARN = IX_LEAF_DELETE_WARN;
 		IX_ErrorForward(pf_fh.UnpinPage(page));
 		if (numKeys == 0) {
+			int temp_pnum;
+			IX_ErrorForward(ph.GetPageNum(temp_pnum));
+			IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
 			// delete entry from the leaf
 			if (index < pHdr->num_keys - 1) {
 				index += 1;
@@ -269,12 +278,15 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 					shiftBytes(rids + i * sizeof(RID), sizeof(RID), 
 								to_shift, -1);	
 				}
-				pHdr->num_keys--;
 				break;
 			}
 		}
 		if (!found) return IX_REC_NOT_FOUND;
 	}
+	// Mark the current page dirty as some entry got deleted
+	int temp_pnum;
+	IX_ErrorForward(ph.GetPageNum(temp_pnum));
+	IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
 	if (pHdr->num_keys == 0) {
 		// update the pointers of the nearby pages
 		PF_PageHandle newph;
@@ -291,6 +303,7 @@ RC IX_IndexHandle::leafDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 		IX_ErrorForward(pf_fh.UnpinPage(pHdr->right_pnum));
 	}
 	// will be deleted by the parent if no. of keys is 0
+	pHdr->num_keys--;
 	numKeys = pHdr->num_keys;
 	return OK_RC;
 }
@@ -318,6 +331,12 @@ RC IX_IndexHandle::overflowDelete(PF_PageHandle &ph, const RID& rid, int& numKey
 			break;
 		}
 	}
+	if (found) {
+		int temp_pnum;
+		IX_ErrorForward(ph.GetPageNum(temp_pnum));
+		IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
+	}
+
 	// if key not found
 	if (!found) {
 		// if this is the last page
@@ -471,6 +490,10 @@ RC IX_IndexHandle::splitLeaf(char* page, int pnum, void* &pData,
 	newkeys = newdata + sizeof(IX_LeafHdr);
 	newpointers = newkeys + fHdr.attrLength * fHdr.leaf_capacity;
 
+	// Mark both the pages dirty
+	IX_ErrorForward(pf_fh.MarkDirty(pnum));
+	IX_ErrorForward(pf_fh.MarkDirty(newpnum));
+
 	// get orig page keys and pointers
 	char *keys, *pointers;
 	keys = page + sizeof(IX_LeafHdr);
@@ -511,7 +534,7 @@ RC IX_IndexHandle::splitLeaf(char* page, int pnum, void* &pData,
 		pHdr->num_keys++;
 	} else {
 		// insert in the new page
-		index -= (tokeep + 1);
+		index -= tokeep;
 		arrayInsert(newkeys, (void*) pData, fHdr.attrLength, index, togive);
 		arrayInsert(newpointers, (void*) &rid, sizeof(RID), index, togive);
 		newpHdr->num_keys++;
@@ -539,6 +562,9 @@ RC IX_IndexHandle::splitInternal(char* page, void* &pData,
 	PageNum newpnum;
 	IX_ErrorForward(newph.GetPageNum(newpnum));
 	IX_ErrorForward(newph.GetData(newpage));
+	// Mark the new page dirty, the old page is marked dirty at
+	// the place where this method is called
+	IX_ErrorForward(pf_fh.MarkDirty(newpnum));
 	char *newkeys, *newpointers;
 	newkeys = newpage + sizeof(IX_InternalHdr);
 	newpointers = newkeys + fHdr.attrLength * fHdr.internal_capacity;
@@ -615,7 +641,8 @@ RC IX_IndexHandle::squeezeLeaf(char* page, int& opnum) {
 	// create an overflow page
 	char* op_data;
 	IX_ErrorForward(createOverflow(page, opnum, op_data, dup_key)); 
-	// unpin the page
+	// mark dirty and unpin the page
+	IX_ErrorForward(pf_fh.MarkDirty(opnum));
 	IX_ErrorForward(pf_fh.UnpinPage(opnum));
 	return OK_RC;
 }
@@ -716,15 +743,26 @@ RC IX_IndexHandle::leafInsert(PF_PageHandle &ph, void *&pData,
 					temp_rid = (RID*) (pointers + i * sizeof(RID));
 					if (*temp_rid == rid) return IX_DUPLICATE_INSERT;
 				}
+				// Mark as dirty 
+				int temp_pnum;
+				IX_ErrorForward(ph.GetPageNum(temp_pnum));
+				IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
+				// put the data
 				arrayInsert(keys, pData, fHdr.attrLength, index, pHdr->num_keys);
 				arrayInsert(pointers, (void*) (&rid), sizeof(RID), index, pHdr->num_keys);
+				pHdr->num_keys++;
 				return OK_RC;
 			}
 		}
 		// if the key doesn't exist in page, simply put it
 		else {
+			// Mark the page as dirty
+			int temp_pnum;
+			IX_ErrorForward(ph.GetPageNum(temp_pnum));
+			IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
 			arrayInsert(keys, pData, fHdr.attrLength, index, pHdr->num_keys);
 			arrayInsert(pointers, (void*) (&rid), sizeof(RID), index, pHdr->num_keys);
+			pHdr->num_keys++;
 			return OK_RC;
 		}
 	}
@@ -733,8 +771,11 @@ RC IX_IndexHandle::leafInsert(PF_PageHandle &ph, void *&pData,
 		// squeeze the page to get space
 		int opnum; // -1 if squeeze not possible
 		IX_ErrorForward(squeezeLeaf(page, opnum));
-		// if page squeezed, call the function again
+		// if page squeezed, mark dirty and call the function again
 		if (opnum >= 0) {
+			int temp_pnum;
+			IX_ErrorForward(ph.GetPageNum(temp_pnum));
+			IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
 			IX_ErrorForward(leafInsert(ph, pData, rid, newpage));
 			return OK_RC;
 		}
@@ -742,6 +783,11 @@ RC IX_IndexHandle::leafInsert(PF_PageHandle &ph, void *&pData,
 		else {
 			// if the key exists, create an overflow page
 			if (found) {
+				// mark dirty 
+				int temp_pnum;
+				IX_ErrorForward(ph.GetPageNum(temp_pnum));
+				IX_ErrorForward(pf_fh.MarkDirty(temp_pnum));
+
 				// check for duplicates
 				RID *temp_rid;
 				for (int i = 0; i < pHdr->num_keys; i++) {
@@ -792,31 +838,38 @@ RC IX_IndexHandle::overflowInsert(PF_PageHandle &ph, const RID &rid) {
 			temp_rid = (RID*) (rids + i * sizeof(RID));
 			if (*temp_rid == rid) return IX_DUPLICATE_INSERT;
 		}
+		// mark dirty
+		IX_ErrorForward(pf_fh.MarkDirty(pnum));
 		RID* new_rid = (RID*) (rids	+ num_rids * sizeof(RID));
 		*new_rid = rid;
 		pHdr->num_rids++;
-		return OK_RC;	
+		return OK_RC;
 	}
-
-	// if the page has no space, create a new page and call function on it
+	// if the page has no space
 	else {
 		PF_PageHandle overflow_handle;
+		// if there is no next page, allocate a new page and update the header
 		if (pHdr->next_page == IX_SENTINEL) {
 			IX_ErrorForward(pf_fh.AllocatePage(overflow_handle));
+			char* op_data;
+			IX_ErrorForward(overflow_handle.GetData(op_data));
+			// update the header
+			IX_OverflowHdr *oHdr = (IX_OverflowHdr*) op_data;
+			oHdr->next_page = IX_SENTINEL;
+			oHdr->num_rids = 0;
+			// mark the current page as dirty, overflow page will be marked
+			// dirty in its call
+			IX_ErrorForward(pf_fh.MarkDirty(pnum));
 		}
 		else {
 			IX_ErrorForward(pf_fh.GetThisPage(pHdr->next_page, overflow_handle));
 		}
-		char* op_data;
+		
+		// call the function on overflow_handle, it will be marked dirty 
+		// during its call
+		IX_ErrorForward(overflowInsert(overflow_handle, rid));
 		int opnum;
 		IX_ErrorForward(overflow_handle.GetPageNum(opnum));
-		IX_ErrorForward(overflow_handle.GetData(op_data));
-		// update the header
-		IX_OverflowHdr *oHdr = (IX_OverflowHdr*) op_data;
-		oHdr->next_page = IX_SENTINEL;
-		oHdr->num_rids = 0;
-		// call the function on it
-		IX_ErrorForward(overflowInsert(overflow_handle, rid));
 		IX_ErrorForward(pf_fh.UnpinPage(opnum));
 		return OK_RC;		
 	}
@@ -878,16 +931,9 @@ RC IX_IndexHandle::treeInsert(PF_PageHandle &ph, void *&pData,
 			if (found) {
 				return WARN; // new key should not be found
 			}
+			IX_ErrorForward(pf_fh.MarkDirty(pnum));
 			arrayInsert(keys, pData, fHdr.attrLength, nk_index, num_keys);
-			// if nk_index is 0, newpage should become the leftmost page
-			if (nk_index == 0) {
-				shiftBytes(pointers, sizeof(PageNum), num_keys, 1);
-				memcpy(pointers, &(pHdr->left_pnum), sizeof(PageNum));
-				pHdr->left_pnum = newpage;
-			} else {
-				nk_index--;
-				arrayInsert(pointers, (void*) (&newpage), sizeof(PageNum), nk_index, num_keys);
-			}
+			arrayInsert(pointers, (void*) (&newpage), sizeof(PageNum), nk_index, num_keys);
 			pHdr->num_keys++;
 			newpage = -1;
 			return OK_RC;	
@@ -895,6 +941,7 @@ RC IX_IndexHandle::treeInsert(PF_PageHandle &ph, void *&pData,
 		// if the internal page is full, it must be split
 		else {
 			IX_ErrorForward(splitInternal(page, pData, newpage));
+			IX_ErrorForward(pf_fh.MarkDirty(pnum));
 			return OK_RC;
 		}
 	} 

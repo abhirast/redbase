@@ -219,6 +219,7 @@ RC InsertIntEntries(IX_IndexHandle &ih, int nEntries)
    printf("             Adding %d int entries\n", nEntries);
    ran(nEntries);
    for(i = 0; i < nEntries; i++) {
+      cout<<value<<"\n";
       value = values[i] + 1;
       RID rid(value, value*2);
       if ((rc = ih.InsertEntry((void *)&value, rid)))
@@ -340,6 +341,7 @@ RC DeleteIntEntries(IX_IndexHandle &ih, int nEntries)
    ran(nEntries);
    for (i = 0; i < nEntries; i++) {
       value = values[i] + 1;
+      cout<<value<<"\t";
       RID rid(value, value*2);
       if ((rc = ih.DeleteEntry((void *)&value, rid)))
          return (rc);

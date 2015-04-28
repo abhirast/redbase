@@ -77,7 +77,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
             break;
     }
     // seek to the first leaf page
-    int pnum = root_pnum;
+    int pnum = fHdr.root_pnum;
     PF_PageHandle ph;
     char *data;
 
@@ -218,7 +218,6 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
             IX_ErrorForward(GetNextEntry(rid));
             return OK_RC;
         } 
-        leaf_index++;
         // if leaf finished
         if (leaf_index == pHdr->num_keys) {
             if (next_leaf == IX_SENTINEL) {
@@ -230,6 +229,8 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
             leaf_index = 0;
             onOverflow = false;
         }
+        leaf_index++;
+        IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
         return OK_RC;
     }
 
