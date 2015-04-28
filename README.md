@@ -1,7 +1,7 @@
 # ix_DOC #
 
 #### Index layout ####
-The first page of the index file contains the file header which contains useful information about the index which is common to all the pages. The page header stores (i) key length, (ii) page number of root (iii) maximum number of keys that internal pages can hold, (iv) maximum number of keys that leaf pages can hold (v) maximum number of RIDs that overflow pages can hold (vi) page number of header (vii) indexed attribute type.
+The index has been implemented using a data structure similar to B+ tree and the variations are described below. The first page of the index file contains the file header which contains useful information about the index which is common to all the pages. The page header stores (i) key length, (ii) page number of root (iii) maximum number of keys that internal pages can hold, (iv) maximum number of keys that leaf pages can hold (v) maximum number of RIDs that overflow pages can hold (vi) page number of header (vii) indexed attribute type.
 
 Three different types of pages can be found in the index - INTERNAL pages, LEAF pages and OVERFLOW pages. The RIDs are stored in LEAF and OVERFLOW pages only. The INTERNAL pages direct the search so that we can reach the appropriate LEAF page and then an OVERFLOW page if applicable. All pages keep the count of number of keys/pointers contained in them in their page header.
 
@@ -15,13 +15,17 @@ When an index file is created, no root is allocated to it. When the first insert
 Duplicates keys may exist in the same LEAF page or in OVERFLOW pages. If a duplicate key is inserted in a LEAF page which has space, the (key, RID) pair is inserted in the LEAF page and no OVERFLOW page is allocated. When a page becomes full and we want to insert a new (key, RID) pair in it, we might need to split it to create space. But prior to considering a split, it is checked whether the LEAF page contains any duplicate keys and if it does, an OVERFLOW page is created for the key with the highest frequency in the LEAF. All the RIDs for this key are then moved to the overflow page. A single copy of the key is kept in the LEAF page having a dummy RID whose page number denotes the first page OVERFLOW page and the slot number is set to a negative value to indicate the presence of an OVERFLOW page. Thus splits can be avoided if duplicate keys exist in the same LEAF page. Also, as a result of this design, the same key can't exist in two different LEAF pages, avoiding the complication of keeping null pointer in parents to indicate such cases. Keeping duplicates in the LEAF helps us to avoid an extra IO if there is space in the LEAF.
 
 #### Deleting from index ####
-The tree structure is not changed during deletion. 
+The tree structure is not changed during deletion and a page is kept even if it becomes empty. This doesn't affect performance much if we have infrequent deletions in our use case or if the number of insertions is much higher than the number of deletions which ends up filling the empty pages created during deletion. If an OVERFLOW page becomes empty during deletion, it is disposed if it is the last page in the linked list of OVERFLOW pages. If it is not the last page, all the contents of the next page are copied into in and the next page is deleted, effectively getting rid of the OVERFLOW page which became empty. A simple optimization that can be implemented while deletion in OVERFLOW pages is to get rid of the OVERFLOW page if there is sufficient space in the LEAF page. I haven't implemented it yet but plan to do so. 
 
-#### Pinning Strategy ####
+#### Scanning ####
+I have disallowed inequality scan operator as the scan using RM file scan would be more efficient in such cases. The six allowed scan operators are - (i) Null (always true) (ii) LT(<) (iii) LE(<=) (iv) EQ(==) (v) GT(>) and (vi) GE(>=). For the first three operators, we navigate to the left-most LEAF page in the tree and then scan through the linked list of LEAF pages from left to right till a violation of the scan operator is seen. For the last three operators, we navigate to the appropriate LEAF page which is likely to contain the smallest key which could match the scan condition. After reaching this LEAF, we start navigating towards right using the linked list of LEAF pages and stop when we encounter a key which doesn't match the scan operator or after we have exhausted all keys. The scan takes care of the presence of OVERFLOW pages and emits all the RIDs in an overflow page upon successive calls.  
+
 
 #### Debugging ####
- Valgrind, DDD
+Setting the PF Page size to 60 helped me reduce the capacity of each page and thus helped me examine deep trees with just a few number of records. This greatly helped my debugging process. In addition to this, I used DDD to keep track of changes in the state of the tree during insertion and deletion. I also wrote a few simple tests myself which made debugging easier. I also ran valgrind on tests to check for memory leaks.
 
+#### Acknowledgements ####
+I would like to thank Jaeho for discussion on ways of handling duplicates and project management using git.
 
 # rm_DOC #
 
