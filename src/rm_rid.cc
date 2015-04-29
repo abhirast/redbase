@@ -6,8 +6,8 @@ using namespace std;
 
 // Default constructor
 RID::RID() {
-	pageNum = -1;
-	slotNum = -1;
+	pageNum = RID_FLAG;
+	slotNum = RID_FLAG;
 }
 
 RID::RID(PageNum pageNum, SlotNum slotNum) {
@@ -42,7 +42,7 @@ bool RID::operator==(const RID &rid) const {
 // Return page number
 RC RID::GetPageNum(PageNum &pageNum) const {
 	// Error if RID not initialized using second constructor
-	if (this->pageNum < 0) return RM_INVALID_RID;
+	if (this->pageNum == RID_FLAG) return RM_INVALID_RID;
 	pageNum = this->pageNum;
 	return OK_RC;
 }
@@ -50,7 +50,7 @@ RC RID::GetPageNum(PageNum &pageNum) const {
 // Return slot number
 RC RID::GetSlotNum(SlotNum &slotNum) const {
 	//Error if RID not initialized using second constructor
-	if (this->slotNum < 0) return RM_INVALID_RID;
+	if (this->slotNum == RID_FLAG) return RM_INVALID_RID;
 	slotNum = this->slotNum;
 	return OK_RC;	
 }

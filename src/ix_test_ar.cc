@@ -65,14 +65,14 @@ void test2() {
     // insert the records
 	for (int i = 0; i < 40; i++) {
 		RID rid(i+1, i+1);
-		int x = i;
+		int x = 1;
 		IX_Error(ih.InsertEntry((void*) &x, rid));
 	}
 	IX_Error(ih.ForcePages());
 	// delete the entries
 	for (int i = 0; i < 15; i++) {
 		RID rid(keys[i]+1, keys[i]+1);
-		int x = keys[i];
+		int x = 1;
 		cout<<"deleting record "<< i<<endl; 
 		IX_Error(ih.DeleteEntry((void*) &x, rid));
 	}
@@ -81,8 +81,27 @@ void test2() {
 	cout<<"Test 2 passed\n";
 }
 
+void test3() {
+	IX_IndexHandle ih;
+	char* filename = "testrel3";
+	int index = 0;
+	
+	IX_Error(ixm.CreateIndex(filename, index, STRING, 9));
+	IX_Error(ixm.OpenIndex(filename, index, ih));
+    // insert the records
+	for (int i = 10; i < 25; i++) {
+		RID rid(i+1, i+1);
+		char x[10];
+		sprintf(x, "abhinav%d", (i*i) % 80 + 10);
+		IX_Error(ih.InsertEntry((void*) &x, rid));
+	}
+	IX_Error(ixm.CloseIndex(ih));
+	IX_Error(ixm.DestroyIndex(filename, index));
+	cout<<"Test 2 passed\n";
+}
+
 
 int main() {
-	test2();
+	test3();
 	return 0;
 }

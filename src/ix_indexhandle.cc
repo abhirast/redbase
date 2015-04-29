@@ -157,7 +157,6 @@ RC IX_IndexHandle::treeDelete(PF_PageHandle &ph, void *pData, const RID& rid, in
 	IX_InternalHdr *pHdr = (IX_InternalHdr*) data;
 
 	if (pHdr->num_keys == 0) {
-		cout<<"empty page\n";
 		return IX_REC_NOT_FOUND;
 	}
 	// base case, leaf reached

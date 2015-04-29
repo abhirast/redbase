@@ -75,7 +75,7 @@ RC PrintIndex(IX_IndexHandle &ih);
 //
 // Array of pointers to the test functions
 //
-#define NUM_TESTS       3               // number of tests
+#define NUM_TESTS       4               // number of tests
 int (*tests[])() =                      // RC doesn't work on some compilers
 {
    Test1,
@@ -219,7 +219,6 @@ RC InsertIntEntries(IX_IndexHandle &ih, int nEntries)
    printf("Adding %d int entries\n", nEntries);
    ran(nEntries);
    for(i = 0; i < nEntries; i++) {
-      cout<<"Adding key "<<value<<"\n";
       value = values[i] + 1;
       RID rid(value, value*2);
       if ((rc = ih.InsertEntry((void *)&value, rid)))
@@ -246,7 +245,7 @@ RC InsertFloatEntries(IX_IndexHandle &ih, int nEntries)
    int   i;
    float value;
 
-   printf("             Adding %d float entries\n", nEntries);
+   printf("Adding %d float entries\n", nEntries);
    ran(nEntries);
    for (i = 0; i < nEntries; i++) {
       value = values[i] + 1;
@@ -341,7 +340,6 @@ RC DeleteIntEntries(IX_IndexHandle &ih, int nEntries)
    ran(nEntries);
    for (i = 0; i < nEntries; i++) {
       value = values[i] + 1;
-      cout<<value<<"\t";
       RID rid(value, value*2);
       if ((rc = ih.DeleteEntry((void *)&value, rid)))
          return (rc);
@@ -435,7 +433,6 @@ RC VerifyIntIndex(IX_IndexHandle &ih, int nStart, int nEntries, int bExists)
 
    for (i = nStart; i < nStart + nEntries; i++) {
       int value = values[i] + 1;
-      cout<<"Verifying entry "<<value<<endl;
       if ((rc = scan.OpenScan(ih, EQ_OP, &value))) {
          printf("Verify error: opening scan\n");
          return (rc);

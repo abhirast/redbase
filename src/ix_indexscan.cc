@@ -28,6 +28,7 @@ using namespace std;
 
 IX_IndexScan::IX_IndexScan() {
     bIsOpen = 0;
+    leaf_index = 0;
 }
 IX_IndexScan::~IX_IndexScan() {
     if (bIsOpen) {
@@ -79,10 +80,11 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     }
     // seek to the first leaf page
     int pnum = fHdr.root_pnum;
+    if (pnum == IX_SENTINEL) return IX_EOF;
     PF_PageHandle ph;
     char *data;
 
-    while (pnum != IX_SENTINEL) {
+    do {
         IX_ErrorForward(pf_fh->GetThisPage(pnum, ph));
         IX_ErrorForward(ph.GetData(data));
         IX_InternalHdr *pHdr = (IX_InternalHdr*) data;
@@ -112,7 +114,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
         // unpin the page
         IX_ErrorForward(pf_fh->UnpinPage(pnum));
         pnum = next_page;
-    }
+    } while (pnum != IX_SENTINEL);
     // initialize the indices
     current_leaf = pnum;
     // check if a viable key exists in the leaf page
@@ -120,6 +122,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     next_leaf = pHdr->right_pnum;
     char* keys = data + sizeof(IX_LeafHdr);
     char *pointers = keys + fHdr.attrLength * fHdr.leaf_capacity;
+    found = false;
     for (int i = 0; i < pHdr->num_keys; i++) {
         if ((this->*comp)(keys + i * fHdr.attrLength)) {
             found = true;
@@ -130,7 +133,8 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     // Get the pointer corresponding to this key to see if we will go 
     // to an overflow page
     RID *rid = (RID*) (pointers + leaf_index * sizeof(RID));
-    int page, slot;
+    int page = -1;
+    int slot = -1;
     IX_ErrorForward(rid->GetPageNum(page));
     IX_ErrorForward(rid->GetSlotNum(slot));
     if (slot < 0) {
@@ -154,7 +158,6 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
     if (!bIsOpen) return IX_SCAN_CLOSED;
     if (!found) return IX_EOF;
     PF_PageHandle ph;
-    cout<<"leaf index is "<<leaf_index<<endl;
     // if currently on an overflow page
     if (onOverflow) {
         // get the overflow page

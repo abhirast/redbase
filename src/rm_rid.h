@@ -17,6 +17,9 @@
 #define RM_INVALID_RID              (START_RM_WARN + 6)
 #endif
 
+
+# define RID_FLAG -1771
+
 //
 // PageNum: uniquely identifies a page in a file
 //
