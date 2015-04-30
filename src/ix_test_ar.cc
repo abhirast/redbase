@@ -136,7 +136,7 @@ void test4() {
 	IX_Error(ixm.CreateIndex(filename, index, INT, sizeof(int)));
 	IX_Error(ixm.OpenIndex(filename, index, ih));
     // insert the records
-	for (int j = 0; j < 50000; j++) {
+	for (int j = 0; j < 5000; j++) {
 		RID rid(j+1, j+1);
 		int x = j;
 		IX_Error(ih.InsertEntry((void*) &x, rid));
@@ -155,7 +155,7 @@ void test4() {
 			IX_PrintError(rc);
 			break;
 		}
-		IX_Error(ih.DeleteEntry((void*) &re, tmp));
+		//IX_Error(ih.DeleteEntry((void*) &re, tmp));
 		re++;
 		IX_Error(tmp.GetPageNum(p));
 		IX_Error(tmp.GetSlotNum(s));

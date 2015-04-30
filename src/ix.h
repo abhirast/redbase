@@ -50,6 +50,7 @@ private:
     PF_FileHandle pf_fh;
     IX_FileHdr fHdr;
     int bHeaderChanged;
+    RID last_deleted;
     void buffer(void *ptr, char* buff) const;
     bool eq_op(void* attr1, void* attr2) const;
     bool ne_op(void* attr1, void* attr2) const;
@@ -96,6 +97,7 @@ public:
 private:
     const PF_FileHandle *pf_fh;
     const IX_IndexHandle *ix_ih;
+    RID last_emitted;
     IX_FileHdr fHdr;
     int bIsOpen;
     char *query_value;

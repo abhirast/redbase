@@ -153,6 +153,9 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
     // unpin the page
     if (pnum != IX_SENTINEL) IX_ErrorForward(pf_fh->UnpinPage(pnum));
     bIsOpen = 1;
+    // set last deleted to invalid rec id
+    RID temp(-1,-1);
+    (const_cast<IX_IndexHandle*>(ix_ih))->last_deleted = temp;
     return OK_RC;
 }
 
@@ -166,6 +169,9 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
     PF_PageHandle ph;
     // if currently on an overflow page
     if (onOverflow) {
+        if (last_emitted == ix_ih->last_deleted && overflow_index > 0) {
+            overflow_index--;
+        }
         // get the overflow page
         IX_ErrorForward(pf_fh->GetThisPage(current_overflow, ph));
         int to_unpin = current_overflow;
@@ -195,10 +201,14 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
         }
         // unpin the current page
         IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
+        last_emitted = rid;
         return OK_RC;
     }
     // if not on overflow
     else {
+        if (last_emitted == ix_ih->last_deleted && leaf_index > 0) {
+            leaf_index--;
+        }
         // get the current leaf page
         IX_ErrorForward(pf_fh->GetThisPage(current_leaf, ph));
         int to_unpin = current_leaf;
@@ -227,6 +237,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
             onOverflow = true;
             IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
             IX_ErrorForward(GetNextEntry(rid));
+            last_emitted = rid;
             return OK_RC;
         } 
         leaf_index++;
@@ -243,6 +254,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid) {
             onOverflow = false;
         }
         IX_ErrorForward(pf_fh->UnpinPage(to_unpin));
+        last_emitted = rid;
         return OK_RC;
     }
 

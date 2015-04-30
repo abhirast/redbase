@@ -132,6 +132,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid) {
 	WARN = IX_DELETE_WARN;
 	// the root page is never deleted even if it becomes empty
 	IX_ErrorForward(pf_fh.UnpinPage(fHdr.root_pnum));
+	last_deleted = rid;
 	return OK_RC;
 }
 
