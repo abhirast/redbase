@@ -130,6 +130,11 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
             break;
         }
     }
+    if (!found && comp_op == GT_OP) {
+        found = true;
+        leaf_index = 0;
+        current_leaf = next_leaf;
+    }
     // Get the pointer corresponding to this key to see if we will go 
     // to an overflow page
     RID *rid = (RID*) (pointers + leaf_index * sizeof(RID));

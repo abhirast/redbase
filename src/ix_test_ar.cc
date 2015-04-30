@@ -86,18 +86,40 @@ void test3() {
 	char* filename = "testrel3";
 	int index = 0;
 	
-	IX_Error(ixm.CreateIndex(filename, index, STRING, 9));
+	IX_Error(ixm.CreateIndex(filename, index, STRING, 10));
 	IX_Error(ixm.OpenIndex(filename, index, ih));
     // insert the records
-	for (int i = 10; i < 25; i++) {
+	for (int i = 100; i < 999; i++) {
 		RID rid(i+1, i+1);
-		char x[10];
-		sprintf(x, "abhinav%d", (i*i) % 80 + 10);
+		char x[11];
+		sprintf(x, "abhinav%d", i);
 		IX_Error(ih.InsertEntry((void*) &x, rid));
 	}
 	IX_Error(ixm.CloseIndex(ih));
+	IX_Error(ixm.OpenIndex(filename, index, ih));
+	
+	// scan the records
+	IX_IndexScan is;
+	char q[11];
+	sprintf(q, "abhinav%d", 251);
+	IX_Error(is.OpenScan(ih, GT_OP, (void*) q, NO_HINT));
+	RC rc;
+	RID tmp;
+	int p,s;
+	while (true) {
+		rc = is.GetNextEntry(tmp);
+		if (rc != 0) {
+			IX_PrintError(rc);
+			break;
+		}
+		IX_Error(tmp.GetPageNum(p));
+		IX_Error(tmp.GetSlotNum(s));
+		cout<<p<<'\t';
+	}
+	IX_Error(ixm.CloseIndex(ih));
+
 	IX_Error(ixm.DestroyIndex(filename, index));
-	cout<<"Test 2 passed\n";
+	cout<<"Test 3 passed\n";
 }
 
 
