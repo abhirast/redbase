@@ -161,6 +161,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 RC IX_IndexScan::GetNextEntry(RID &rid) {
     RC WARN = IX_SCAN_WARN, ERR = IX_SCAN_ERR;
     if (!bIsOpen) return IX_SCAN_CLOSED;
+    if (!(ix_ih->bIsOpen)) return IX_SCAN_CLOSED;
     if (!found) return IX_EOF;
     PF_PageHandle ph;
     // if currently on an overflow page
