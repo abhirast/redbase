@@ -158,6 +158,6 @@ RC RM_Manager::CloseFile(RM_FileHandle &fileHandle) {
 int RM_Manager::numRecordsPerPage(int rec_size) {
     int num = 0;
     int effective_psize = PF_PAGE_SIZE - sizeof(RM_PageHdr);
-    while (num * rec_size +  ceil(num/8.0) < effective_psize) num++;
+    while (num * rec_size +  ceil(num/8.0) <= effective_psize) num++;
     return num - 1;
 }
