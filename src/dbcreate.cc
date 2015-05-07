@@ -18,8 +18,8 @@ using namespace std;
 //
 // main
 //
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
+    
     char *dbname;
     char command[255] = "mkdir ";
     RC rc;
@@ -48,7 +48,32 @@ int main(int argc, char *argv[])
 
     // Create the system catalogs...
 
-    // Fair amount to be filled in here!!
+    /* create relcat, a relation which will contain information about
+        1. Name of the relation in database
+        2. Length of the tuple of the relation
+        3. Number of attributes in the relation
+        4. Number of indexed attributes in the relation
+        5. Page number in attrcat containing attribute information
+    */
+    RC WARN = SM_CREATE_WARN, ERR = SM_CREATE_ERR;
+    PF_Manager pfm;
+    RM_Manager rmm(pfm);
+    char relcat[] = "relcat";
+    // create the file for storing relation catalogs
+    SM_ErrorForward(rmm.CreateFile(relcat, sizeof(CatRelation)));
 
-    return(0);
+
+    /* create attrcat, a relation which will contain information about
+        the attributes in a relation. It has the following fields
+        1. Name of the relation
+        2. Name of the attribute
+        3. Offset of the attribute from beginning of tuple
+        4. Type of the attribute
+        5. Length of the attribute
+        6. Index number of the attribute (-1 if doesn't exist)
+    */
+    char attrcat[] = "attrcat";
+    // create the file for storing attributes 
+    SM_ErrorForward(rmm.CreateFile(relcat, sizeof(CatAttribute)));
+    return 0;
 }

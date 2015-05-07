@@ -15,6 +15,24 @@
 #include "rm.h"
 #include "ix.h"
 
+
+struct CatRelation {
+  char      rel_name[MAXNAME + 1];
+  int       tuple_size;
+  int       num_attr;
+  int       num_indexed_attr;
+  int       attr_pnum;
+};
+
+struct CatAttribute {
+  char      rel_name[MAXNAME + 1];
+  char      attr_name[MAXNAME + 1];
+  int       offset;
+  AttrType  attr_type;
+  int       attr_length;
+  int       index_num;
+};
+
 //
 // SM_Manager: provides data management
 //
@@ -53,5 +71,15 @@ private:
 // Print-error function
 //
 void SM_PrintError(RC rc);
+
+
+// Macro for error forwarding
+// WARN and ERR to be defined in the context where macro is used
+#define SM_ErrorForward(expr) do { \
+RC tmp_rc = (expr);\
+if (tmp_rc != OK_RC) \
+    return ((tmp_rc > 0) ? WARN : ERR); \
+} while (0)
+
 
 #endif
