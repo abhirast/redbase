@@ -20,7 +20,7 @@
 struct RelationInfo {
   // Default constructor
   RelationInfo() {
-    memset(rel_name, 0, MAXNAME + 1);
+    memset((void*) this, 0, sizeof(*this));
   };
 
   char      rel_name[MAXNAME + 1];

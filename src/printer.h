@@ -25,8 +25,7 @@ struct DataAttrInfo
 {
     // Default constructor
     DataAttrInfo() {
-       memset(relName, 0, MAXNAME + 1);
-       memset(attrName, 0, MAXNAME + 1);
+       memset((void*) this, 0, sizeof(*this));
     };
 
     // Copy constructor
