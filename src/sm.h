@@ -98,6 +98,7 @@ if (tmp_rc != OK_RC) \
 #define SM_RELATION_NOT_FOUND               (START_SM_WARN + 10)
 #define SM_ATTRIBUTE_NOT_FOUND              (START_SM_WARN + 11)
 #define SM_PRINT_WARN                       (START_SM_WARN + 11)
+#define SM_NOT_IMPLEMENTED                  (START_SM_WARN + 11)
 #define SM_LASTWARN                         SM_ATTRIBUTE_NOT_FOUND
 
 #define SM_CREATE_ERR                       (START_SM_ERR - 0)

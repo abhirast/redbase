@@ -5,6 +5,7 @@
 #include <cstring>
 #include <algorithm>
 #include <unistd.h>
+#include <sstream>
 #include "redbase.h"
 #include "sm.h"
 #include "ix.h"
@@ -89,6 +90,14 @@ RC SM_Manager::CreateTable(const char *relName,
              << "   attrLength=" << attributes[i].attrLength << "\n";
     }
     if (attrCount < 1) return SM_BAD_INPUT;
+    // check for duplicate attribute name
+    for (int i = 0; i < attrCount; i++) {
+        for (int j = i+1; j < attrCount; j++) {
+            if (strcmp(attributes[i].attrName, attributes[j].attrName) == 0)
+                return SM_BAD_INPUT;
+        }
+    }
+
     // check if the database is open
     if (!isOpen) return SM_DB_CLOSED;
     // check if the relname is not one of catalog names
@@ -220,9 +229,13 @@ RC SM_Manager::CreateIndex(const char *relName,
     //relinfo = (RelationInfo) *relinfodata;
     memcpy(&relinfo, relinfodata, sizeof(RelationInfo));
     relinfo.index_num++;
+    memcpy(relinfodata, &relinfo, sizeof(RelationInfo));
     SM_ErrorForward(ixman->CreateIndex(relName, relinfo.index_num,
         dinfo.attrType, dinfo.attrLength));
     dinfo.indexNo = relinfo.index_num;
+    char *dinfodata;
+    SM_ErrorForward(attrec.GetData(dinfodata));
+    memcpy(dinfodata, &dinfo, sizeof(DataAttrInfo));
     // Add all the records in the relation to index
     IX_IndexHandle ihandle;
     RM_FileHandle relation;
@@ -275,6 +288,9 @@ RC SM_Manager::DropIndex(const char *relName,
     SM_ErrorForward(ixman->DestroyIndex(relName, dinfo.indexNo));
     // update catalog
     dinfo.indexNo = -1;
+    char *dinfodata;
+    SM_ErrorForward(rec.GetData(dinfodata));
+    memcpy(dinfodata, &dinfo, sizeof(DataAttrInfo));
     SM_ErrorForward(attrcat.UpdateRec(rec));
     SM_ErrorForward(relcat.ForcePages(ALL_PAGES));
     SM_ErrorForward(attrcat.ForcePages(ALL_PAGES));
@@ -336,43 +352,39 @@ RC SM_Manager::Load(const char *relName,
     RM_FileHandle relation;
     SM_ErrorForward(rmman->OpenFile(relName, relation));
     // scan through the input file and extract the records
-    string line;
-    int attr_ind = 0;
+    string line, word;
     char* buffer = new char[relinfo->tuple_size];
     RID record_rid;
     ifstream file(fileName);
     if (!file.is_open()) return WARN;
-    while (true) {
-        getline(file, line, ',');
-        if (file.eof()) break;
-        cout<<line<<endl;
-        // memset((void*) buffer, 0, relinfo->tuple_size);
-        if (attributes[attr_ind].attrType == INT) {
-            int intatt = atoi(line.c_str());
-            memcpy(buffer + attributes[attr_ind].offset, 
-                &intatt, attributes[attr_ind].attrLength);
-        } 
-        else if (attributes[attr_ind].attrType == FLOAT) {
-            float flatt = atof(line.c_str());
-            memcpy(buffer+attributes[attr_ind].offset, 
-                &flatt, attributes[attr_ind].attrLength);
-        }
-        else if (attributes[attr_ind].attrType == STRING) {
-            strncpy(buffer+attributes[attr_ind].offset, 
-                line.c_str(), attributes[attr_ind].attrLength);
-        }
-        else {
-            return ERR; // bad attribute type in metadata
-        }
-        attr_ind++;
-        if (attr_ind == relinfo->num_attr) {
-            // insert the tuple into relation and indices
-            attr_ind = 0;
-            SM_ErrorForward(relation.InsertRec(buffer, record_rid));
-            for (size_t i = 0; i < ind.size(); i++) {
-                SM_ErrorForward(ihandles[ind[i]].InsertEntry( (void*) 
-                    (buffer + attributes[ind[i]].offset), record_rid));
+    stringstream ss;
+    while (getline(file, line)) {
+        ss << line;
+        for (int i = 0; i < relinfo->num_attr; i++) {
+            getline(ss, word, ',');
+            if (attributes[i].attrType == INT) {
+                int intatt = atoi(word.c_str());
+                memcpy(buffer + attributes[i].offset, 
+                    &intatt, attributes[i].attrLength);
             }
+            else if (attributes[i].attrType == FLOAT) {
+                float flatt = atof(word.c_str());
+                memcpy(buffer+attributes[i].offset, 
+                    &flatt, attributes[i].attrLength);
+            }
+            else if (attributes[i].attrType == STRING) {
+                strncpy(buffer+attributes[i].offset, 
+                    word.c_str(), attributes[i].attrLength);
+            }
+            else {
+                return ERR; // bad attribute type in metadata
+            }
+        }
+        ss.clear();
+        SM_ErrorForward(relation.InsertRec(buffer, record_rid));
+        for (size_t i = 0; i < ind.size(); i++) {
+            SM_ErrorForward(ihandles[ind[i]].InsertEntry( (void*) 
+                (buffer + attributes[ind[i]].offset), record_rid));
         }
     }
     // free the resources, close the relation and index files
@@ -421,7 +433,7 @@ RC SM_Manager::Print(const char *relName) {
 
     RM_FileScan rfs;
     char *data;
-    RC rc;
+    RC rc = OK_RC;
 
     SM_ErrorForward(rfs.OpenScan(rfh, INT, sizeof(int), 0, NO_OP, NULL));
 
@@ -439,6 +451,8 @@ RC SM_Manager::Print(const char *relName) {
     }
     // Print the footer information
     p.PrintFooter(cout);
+    SM_ErrorForward(rfs.CloseScan());
+    SM_ErrorForward(rmman->CloseFile(rfh));
     delete[] attributes;
     return OK_RC;
 }
@@ -447,18 +461,130 @@ RC SM_Manager::Set(const char *paramName, const char *value) {
     cout << "Set\n"
          << "   paramName=" << paramName << "\n"
          << "   value    =" << value << "\n";
-    return (0);
+    return SM_NOT_IMPLEMENTED;
 }
 
 RC SM_Manager::Help() {
     cout << "Help\n";
-    return (0);
+    RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
+    if (!isOpen) return SM_DB_CLOSED;
+    RM_Record rec;
+    // define the pseudo header
+    DataAttrInfo* attributes = new DataAttrInfo();
+    strcpy(attributes->relName,"relcat");
+    strcpy(attributes->attrName,"Relations in database");
+    attributes->offset = 0;
+    attributes->attrType = STRING;
+    attributes->attrLength = MAXNAME + 1;
+    attributes->indexNo = -1;
+
+    // Instantiate a Printer object and print the header information
+    Printer p(attributes, 1);
+    p.PrintHeader(cout);
+
+    RM_FileScan relscan;
+    SM_ErrorForward(relscan.OpenScan(relcat, STRING, 
+        MAXNAME+1, 0, NO_OP, 0, NO_HINT));
+    char *data;
+    RC rc = OK_RC;
+
+    // Print each tuple
+    while (rc!=RM_EOF) {
+        rc = relscan.GetNextRec(rec);
+
+       if (rc!=0 && rc!=RM_EOF)
+          return (rc);
+
+       if (rc!=RM_EOF) {
+            SM_ErrorForward(rec.GetData(data));
+            p.Print(cout, data);
+        }
+    }
+    // Print the footer information
+    // p.PrintFooter(cout);
+    SM_ErrorForward(relscan.CloseScan());
+    delete attributes;
+    return OK_RC;
 }
 
 RC SM_Manager::Help(const char *relName) {
-    cout << "Help\n"
-         << "   relName=" << relName << "\n";
-    return (0);
+    RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
+    if (!isOpen) return SM_DB_CLOSED;
+    RM_Record rec;
+    // define the pseudo header
+    DataAttrInfo* attributes = new DataAttrInfo[4];
+    strcpy(attributes[0].relName,"attrcat");
+    strcpy(attributes[0].attrName,"Attribute");
+    attributes[0].offset = 0;
+    attributes[0].attrType = STRING;
+    attributes[0].attrLength = MAXNAME + 1;
+    attributes[0].indexNo = -1;
+    strcpy(attributes[1].relName,"attrcat");
+    strcpy(attributes[1].attrName,"Type");
+    attributes[1].offset = MAXNAME + 1;
+    attributes[1].attrType = STRING;
+    attributes[1].attrLength = 7;
+    attributes[1].indexNo = -1;
+    strcpy(attributes[2].relName,"attrcat");
+    strcpy(attributes[2].attrName,"Length");
+    attributes[2].offset = MAXNAME + 8;
+    attributes[2].attrType = INT;
+    attributes[2].attrLength = 4;
+    attributes[2].indexNo = -1;
+    strcpy(attributes[3].relName,"attrcat");
+    strcpy(attributes[3].attrName,"Indexed?");
+    attributes[3].offset = MAXNAME + 12;
+    attributes[3].attrType = STRING;
+    attributes[3].attrLength = 4;
+    attributes[3].indexNo = -1;
+    
+
+    // Instantiate a Printer object and print the header information
+    Printer p(attributes, 4);
+    p.PrintHeader(cout);
+
+    RM_FileScan attrscan;
+    SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
+        MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
+    char *data;
+    RC rc = OK_RC;
+
+    DataAttrInfo dinfo;
+    char* buffer = new char[MAXNAME + 16];
+    string isindexed, dtype;
+    // Print each tuple
+    while (rc!=RM_EOF) {
+        rc = attrscan.GetNextRec(rec);
+
+       if (rc!=0 && rc!=RM_EOF)
+          return (rc);
+
+       if (rc!=RM_EOF) {
+            SM_ErrorForward(rec.GetData(data));
+            memcpy(&dinfo, data, sizeof(DataAttrInfo));
+            if (dinfo.attrType == INT) {
+                dtype = "INT";
+            }
+            else if (dinfo.attrType == FLOAT) {
+                dtype = "FLOAT";
+            }
+            else {
+                dtype = "STRING";
+            }
+            isindexed = (dinfo.indexNo>=0)?"yes":"no";
+            // put the values in buffer
+            strncpy(buffer, dinfo.attrName, MAXNAME+1);
+            strncpy(buffer+MAXNAME+1, dtype.c_str(), 7);
+            memcpy(buffer+MAXNAME+8, (void*) &dinfo.attrLength, 4);
+            strncpy(buffer+MAXNAME+12, isindexed.c_str(), 4);
+            p.Print(cout, buffer);
+        }
+    }
+    // Print the footer information
+    // p.PrintFooter(cout);
+    SM_ErrorForward(attrscan.CloseScan());
+    delete attributes;
+    return OK_RC;
 }
 
 
