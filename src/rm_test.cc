@@ -32,7 +32,7 @@ using namespace std;
 // Defines
 //
 #define FILENAME   "testrel"         // test file name
-#define STRLEN      29               // length of string in testrec
+#define STRLEN      2               // length of string in testrec
 #define PROG_UNIT   50               // how frequently to give progress
                                       //   reports when adding lots of recs
 #define FEW_RECS   100000                // number of records added in
@@ -667,7 +667,7 @@ RC Test4(void)
     RID     rid;
     PageNum pageNum;
     SlotNum slotNum;
-    int numRecs = 120;
+    int numRecs = 10;
     int lim = 80;
     CompOp op = NE_OP;
 
@@ -683,9 +683,10 @@ RC Test4(void)
     memset((void *)record, 0, sizeof(record));
 
     printf("\nadding %d random records\n", numRecs);
+    char stval[4];
     for (i = 0; i < numRecs; i++) {
-        memcpy(record+2, &i, 4);
-        cout<<*((int*) (record+2))<<"\t";
+        sprintf(stval, "%d%d", i,i+1);
+        memcpy(record+2, stval, 2);
         if ((rc = InsertRec(fh, record, rid)) ||
             (rc = rid.GetPageNum(pageNum)) ||
             (rc = rid.GetSlotNum(slotNum)))
@@ -699,9 +700,9 @@ RC Test4(void)
     char *result;
 
     // select for <=
-    lim = 40;
+    char limit[] = "45";
     op = EQ_OP;
-    err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
+    err(fs.OpenScan(fh, STRING, 2, 2, op, (void*) limit, NO_HINT));
     count = 0;
     while (fs.GetNextRec(temp_rec) == OK_RC) {
         count ++;
@@ -711,6 +712,7 @@ RC Test4(void)
 
     printf("\nTotal %d out of %d records found\n", count, numRecs);
     err(fs.CloseScan());
+    /*
     op = (CompOp) 1;
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
     count = 0;
@@ -729,7 +731,7 @@ RC Test4(void)
     err(fs.OpenScan(fh, INT, 4, 2, op, (void*) &lim, NO_HINT));
     PrintError(fs.GetNextRec(temp_rec));
     err(fs.CloseScan());
-
+    */
     err(CloseFile(FILENAME, fh));
     err(DestroyFile(FILENAME));
 
