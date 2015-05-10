@@ -93,6 +93,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	if (fHdr.first_free == RM_SENTINEL) {
 		fHdr.first_free = dest_page;
 		((RM_PageHdr*) data)->next_free = RM_SENTINEL;
+		bHeaderChanged = 1;
 	}
 	int dest_slot = FindSlot(data + fHdr.bitmap_offset);
 	// Update the record on the file
@@ -103,6 +104,7 @@ RC RM_FileHandle::InsertRec  (const char *pData, RID &rid) {
 	// Remove the page from free list if the page became full
 	if (((RM_PageHdr*) data)->num_recs == fHdr.capacity) {
 		fHdr.first_free = ((RM_PageHdr*) data)->next_free;
+		bHeaderChanged = 1;
 	}
 	rid = RID(dest_page, dest_slot);
 	RM_ErrorForward(pf_fh.UnpinPage(dest_page));
@@ -145,6 +147,7 @@ RC RM_FileHandle::DeleteRec(const RID &rid) {
 	if (((RM_PageHdr*) data)->num_recs == fHdr.capacity) {
 		((RM_PageHdr*) data)->next_free = fHdr.first_free;
 		fHdr.first_free = pnum;
+		bHeaderChanged = 1;
 	} 
 	((RM_PageHdr*) data)->num_recs --;
 	RM_ErrorForward(pf_fh.UnpinPage(pnum));
@@ -191,6 +194,18 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
 RC RM_FileHandle::ForcePages (int pageNum) const{
 	RC WARN = RM_FORCEPAGE_FAIL, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
+	if (bHeaderChanged) {
+        PF_PageHandle header;
+        int header_pnum = fHdr.header_pnum;
+        RM_ErrorForward(pf_fh.GetThisPage(header_pnum, header));
+        // update the header
+        RM_ErrorForward(pf_fh.MarkDirty(header_pnum));
+        char *contents;
+        RM_ErrorForward(header.GetData(contents));
+        memcpy(contents, &fHdr, sizeof(RM_FileHdr));
+        // unpin the header
+        RM_ErrorForward(pf_fh.UnpinPage(header_pnum));
+    }
 	RM_ErrorForward(pf_fh.ForcePages(pageNum));
 	return OK_RC;
 }
