@@ -46,7 +46,7 @@ RC test1() {
 	attributes[3].attrLength = 4;
 	char relName[] = "soaprel";
     SM_TestForward(smm.CreateTable(relName, 4, attributes));
-    //SM_TestForward(smm.Load(relName, "/home/abhinav/corn/data/soaps.data"));
+    SM_TestForward(smm.Load(relName, "/home/abhinav/temp/data/soaps.data"));
     SM_TestForward(smm.DropTable(relName));
 }
 

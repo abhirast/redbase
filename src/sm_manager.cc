@@ -297,11 +297,11 @@ RC SM_Manager::Load(const char *relName,
     // check if the relation and load file exist
     if (access(relName, F_OK) != 0) return WARN;
     if (access(fileName, F_OK) != 0) return WARN;
-    RM_Record rec;
+    RM_Record relrec, rec;
     RelationInfo* relinfo;
     char* relinfodata;
-    SM_ErrorForward(getRelInfo(relName, rec));
-    SM_ErrorForward(rec.GetData(relinfodata));
+    SM_ErrorForward(getRelInfo(relName, relrec));
+    SM_ErrorForward(relrec.GetData(relinfodata));
     relinfo = (RelationInfo*) relinfodata;
     // fetch the attributes in the relation
     vector<DataAttrInfo> attributes;
@@ -342,7 +342,10 @@ RC SM_Manager::Load(const char *relName,
     RID record_rid;
     ifstream file(fileName);
     if (!file.is_open()) return WARN;
-    while (getline(file, line, ',')) {
+    while (true) {
+        getline(file, line, ',');
+        if (file.eof()) break;
+        cout<<line<<endl;
         // memset((void*) buffer, 0, relinfo->tuple_size);
         if (attributes[attr_ind].attrType == INT) {
             int intatt = atoi(line.c_str());
