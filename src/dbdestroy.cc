@@ -22,8 +22,7 @@ int main(int argc, char *argv[]) {
     
     char *dbname;
     char command[255] = "rm -r ";
-    RC rc;
-
+    
     // Look for 2 arguments. The first is always the name of the program
     // that was executed, and the second should be the name of the
     // database.

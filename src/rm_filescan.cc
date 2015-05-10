@@ -65,9 +65,9 @@ RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
 	// check if the attribute type is valid
 	if (attrType < INT || attrType > STRING) return RM_SCAN_OPEN_FAIL;
 	// check if attr length and attr type are consistent
-	if (attrType == INT && attrLength != 4
-		|| attrType == FLOAT && attrLength != 4
-		|| attrType == STRING && attrLength > MAXSTRINGLEN)
+	if (((attrType == INT) && (attrLength != 4))
+		|| ((attrType == FLOAT) && (attrLength != 4))
+		|| ((attrType == STRING) && (attrLength > MAXSTRINGLEN)))
 		return RM_SCAN_OPEN_FAIL;
 
 	if (!value) compOp = NO_OP;

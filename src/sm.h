@@ -18,6 +18,11 @@
 
 
 struct RelationInfo {
+  // Default constructor
+  RelationInfo() {
+    memset(rel_name, 0, MAXNAME + 1);
+  };
+
   char      rel_name[MAXNAME + 1];
   int       tuple_size;
   int       num_attr;

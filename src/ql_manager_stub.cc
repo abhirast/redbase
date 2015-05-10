@@ -47,7 +47,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nRelations, const char * const relations[],
                       int nConditions, const Condition conditions[])
 {
-    int i;
+    // int i;
     /*
     cout << "Select\n";
 
@@ -72,7 +72,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
-    int i;
+    // int i;
     /*
     cout << "Insert\n";
 
@@ -90,7 +90,7 @@ RC QL_Manager::Insert(const char *relName,
 RC QL_Manager::Delete(const char *relName,
                       int nConditions, const Condition conditions[])
 {
-    int i;
+    // int i;
     /*
     cout << "Delete\n";
 
@@ -113,7 +113,7 @@ RC QL_Manager::Update(const char *relName,
                       const Value &rhsValue,
                       int nConditions, const Condition conditions[])
 {
-    int i;
+    // int i;
     /*
     cout << "Update\n";
 

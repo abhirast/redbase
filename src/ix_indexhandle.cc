@@ -641,9 +641,9 @@ filled pages to squeeze out some space if possible.
 */
 RC IX_IndexHandle::squeezeLeaf(char* page, int& opnum) {
 	RC WARN = IX_SQUEEZE_WARN, ERR = IX_SQUEEZE_ERR;
-	IX_LeafHdr* pHdr = (IX_LeafHdr*) page;
+	// IX_LeafHdr* pHdr = (IX_LeafHdr*) page;
 	char *keys = page + sizeof(IX_LeafHdr);
-	char *pointers = keys + fHdr.attrLength * fHdr.leaf_capacity;
+	// char *pointers = keys + fHdr.attrLength * fHdr.leaf_capacity;
 	// if the page has duplicates, flush them to a new overflow page
 	int dup_index;
 	int num_dups = checkDuplicates(keys, fHdr.leaf_capacity, dup_index);

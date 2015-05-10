@@ -20,7 +20,7 @@ if (tmp_rc != OK_RC) \
 
 using namespace std;
 
-RC test1() {
+void test1() {
 	PF_Manager pfm;
     RM_Manager rmm(pfm);
     IX_Manager ixm(pfm);
@@ -55,7 +55,7 @@ RC test1() {
     SM_TestForward(smm.DropTable(relName));
 }
 
-RC test2() {
+void test2() {
 	PF_Manager pfm;
     RM_Manager rmm(pfm);
     IX_Manager ixm(pfm);
@@ -84,7 +84,7 @@ RC test2() {
     //SM_TestForward(smm.CreateIndex(relName, a1));
     //SM_TestForward(smm.CreateIndex(relName, a2));
     //SM_TestForward(smm.Print(relName));
-    SM_TestForward(smm.Help(relName));
+    // SM_TestForward(smm.Help(relName));
     SM_TestForward(smm.DropTable(relName));
     delete[] attributes;
 }

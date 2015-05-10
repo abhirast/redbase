@@ -130,8 +130,8 @@ RC SM_Manager::CreateTable(const char *relName,
     DataAttrInfo attr_desc;
     RID temp_rid;
     for (int i = 0, offset = 0; i < attrCount; i++) {
-        strcpy(attr_desc.relName, relName);
-        strcpy(attr_desc.attrName, attributes[i].attrName);
+        strncpy(attr_desc.relName, relName, MAXNAME+1);
+        strncpy(attr_desc.attrName, attributes[i].attrName, MAXNAME+1);
         attr_desc.offset = offset;
         offset += attributes[i].attrLength;
         attr_desc.attrType = attributes[i].attrType;

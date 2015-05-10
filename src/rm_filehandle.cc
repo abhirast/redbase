@@ -206,7 +206,11 @@ RC RM_FileHandle::ForcePages (int pageNum) const{
         // unpin the header
         RM_ErrorForward(pf_fh.UnpinPage(header_pnum));
     }
-	RM_ErrorForward(pf_fh.ForcePages(pageNum));
+    if (pageNum == ALL_PAGES) {
+    	RM_ErrorForward(pf_fh.FlushPages());
+    } else {
+		RM_ErrorForward(pf_fh.ForcePages(pageNum));
+	}
 	return OK_RC;
 }
 
