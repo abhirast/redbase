@@ -14,24 +14,17 @@
 #include "parser.h"
 #include "rm.h"
 #include "ix.h"
+#include "printer.h"  // for DataAttrInfo
 
 
-struct CatRelation {
+struct RelationInfo {
   char      rel_name[MAXNAME + 1];
   int       tuple_size;
   int       num_attr;
-  int       num_indexed_attr;
-  int       attr_pnum;
+  int       index_num;
+  // RID       relcat_id; make more efficient by eliminating scans?
 };
 
-struct CatAttribute {
-  char      rel_name[MAXNAME + 1];
-  char      attr_name[MAXNAME + 1];
-  int       offset;
-  AttrType  attr_type;
-  int       attr_length;
-  int       index_num;
-};
 
 //
 // SM_Manager: provides data management
@@ -65,6 +58,14 @@ public:
                    const char *value);            //   value
 
 private:
+    IX_Manager*         ixman;          // ix manager
+    RM_Manager*         rmman;          // rm manager
+    bool                isOpen;         // indicates whether a db is open
+    RM_FileHandle       relcat;         // handle to the relation 
+    RM_FileHandle       attrcat;        // handle to attribute catalog
+    RC getRelInfo(const char* relName, RM_Record &rec);
+    RC getAttrInfo(const char* relName, const char* attrName, 
+                DataAttrInfo &dinfo, RM_Record &rec); 
 };
 
 //
@@ -80,6 +81,34 @@ RC tmp_rc = (expr);\
 if (tmp_rc != OK_RC) \
     return ((tmp_rc > 0) ? WARN : ERR); \
 } while (0)
+
+
+// Error codes
+
+#define SM_CREATE_WARN                      (START_SM_WARN + 0)
+#define SM_OPEN_WARN                        (START_SM_WARN + 1)
+#define SM_CLOSE_WARN                       (START_SM_WARN + 2)
+#define SM_BAD_INPUT                        (START_SM_WARN + 3)
+#define SM_DROP_WARN                        (START_SM_WARN + 4)
+#define SM_IXCREATE_WARN                    (START_SM_WARN + 5)
+#define SM_IXDROP_WARN                      (START_SM_WARN + 6)
+#define SM_DB_CLOSED                        (START_SM_WARN + 7)
+#define SM_LOAD_WARN                        (START_SM_WARN + 8)
+#define SM_DUPLICATE_RELATION               (START_SM_WARN + 9)
+#define SM_RELATION_NOT_FOUND               (START_SM_WARN + 10)
+#define SM_ATTRIBUTE_NOT_FOUND              (START_SM_WARN + 11)
+#define SM_PRINT_WARN                       (START_SM_WARN + 11)
+#define SM_LASTWARN                         SM_ATTRIBUTE_NOT_FOUND
+
+#define SM_CREATE_ERR                       (START_SM_ERR - 0)
+#define SM_OPEN_ERR                         (START_SM_ERR - 1)
+#define SM_CLOSE_ERR                        (START_SM_ERR - 2)
+#define SM_DROP_ERR                         (START_SM_ERR - 3)
+#define SM_IXCREATE_ERR                     (START_SM_ERR - 4)
+#define SM_IXDROP_ERR                       (START_SM_ERR - 5)
+#define SM_LOAD_ERR                         (START_SM_ERR - 6)
+#define SM_PRINT_ERR                        (START_SM_ERR - 6)
+#define SM_LASTERROR                        SM_LOAD_ERR
 
 
 #endif

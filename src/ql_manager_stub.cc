@@ -48,7 +48,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nConditions, const Condition conditions[])
 {
     int i;
-
+    /*
     cout << "Select\n";
 
     cout << "   nSelAttrs = " << nSelAttrs << "\n";
@@ -62,7 +62,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-
+    */
     return 0;
 }
 
@@ -73,14 +73,14 @@ RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
     int i;
-
+    /*
     cout << "Insert\n";
 
     cout << "   relName = " << relName << "\n";
     cout << "   nValues = " << nValues << "\n";
     for (i = 0; i < nValues; i++)
         cout << "   values[" << i << "]:" << values[i] << "\n";
-
+    */
     return 0;
 }
 
@@ -91,14 +91,14 @@ RC QL_Manager::Delete(const char *relName,
                       int nConditions, const Condition conditions[])
 {
     int i;
-
+    /*
     cout << "Delete\n";
 
     cout << "   relName = " << relName << "\n";
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-
+    */
     return 0;
 }
 
@@ -114,7 +114,7 @@ RC QL_Manager::Update(const char *relName,
                       int nConditions, const Condition conditions[])
 {
     int i;
-
+    /*
     cout << "Update\n";
 
     cout << "   relName = " << relName << "\n";
@@ -127,7 +127,7 @@ RC QL_Manager::Update(const char *relName,
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-
+    */
     return 0;
 }
 
@@ -139,5 +139,5 @@ RC QL_Manager::Update(const char *relName,
 //
 void QL_PrintError(RC rc)
 {
-    cout << "QL_PrintError\n   rc=" << rc << "\n";
+   // cout << "QL_PrintError\n   rc=" << rc << "\n";
 }

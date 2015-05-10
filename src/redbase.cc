@@ -12,6 +12,7 @@
 #include "redbase.h"
 #include "rm.h"
 #include "sm.h"
+#include "ql.h"
 
 using namespace std;
 
@@ -31,11 +32,24 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    // *********************************
-    //
-    // Fair amount to be filled in here!!
-    //
-    // *********************************
+    dbname = argv[1];
 
+    PF_Manager pfm;
+    RM_Manager rmm(pfm);
+    IX_Manager ixm(pfm);
+    SM_Manager smm(ixm, rmm);
+    QL_Manager qlm(smm, ixm, rmm);
+
+    // open the database
+    if (smm.OpenDb(dbname) != OK_RC) {
+        cout<<"Unable to open db\n";
+    }
+
+    RBparse(pfm, smm, qlm);
+
+    // close the database
+    if (smm.CloseDb() != OK_RC) {
+        cout<<"Unable to close db\n";
+    }
     cout << "Bye.\n";
 }

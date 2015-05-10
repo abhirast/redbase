@@ -12,6 +12,7 @@
 #include "rm.h"
 #include "sm.h"
 #include "redbase.h"
+#include "printer.h"
 
 using namespace std;
 
@@ -19,7 +20,7 @@ using namespace std;
 // main
 //
 int main(int argc, char *argv[]) {
-    
+
     char *dbname;
     char command[255] = "mkdir ";
     RC rc;
@@ -55,12 +56,13 @@ int main(int argc, char *argv[]) {
         4. Number of indexed attributes in the relation
         5. Page number in attrcat containing attribute information
     */
-    RC WARN = SM_CREATE_WARN, ERR = SM_CREATE_ERR;
     PF_Manager pfm;
     RM_Manager rmm(pfm);
     char relcat[] = "relcat";
     // create the file for storing relation catalogs
-    SM_ErrorForward(rmm.CreateFile(relcat, sizeof(CatRelation)));
+    if (rmm.CreateFile(relcat, sizeof(RelationInfo)) != 0) {
+        cerr<<"Error while creating relcat\n";
+    }
 
 
     /* create attrcat, a relation which will contain information about
@@ -74,6 +76,8 @@ int main(int argc, char *argv[]) {
     */
     char attrcat[] = "attrcat";
     // create the file for storing attributes 
-    SM_ErrorForward(rmm.CreateFile(relcat, sizeof(CatAttribute)));
+    if (rmm.CreateFile(attrcat, sizeof(DataAttrInfo)) != 0) {
+        cerr<<"Error while creating attrcat\n";
+    }
     return 0;
 }

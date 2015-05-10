@@ -51,6 +51,10 @@ struct DataAttrInfo
        return (*this);
     };
 
+    bool operator<(const DataAttrInfo &d) const {
+       return (this->offset < d.offset);
+    };
+
     char     relName[MAXNAME+1];    // Relation name
     char     attrName[MAXNAME+1];   // Attribute name
     int      offset;                // Offset of attribute

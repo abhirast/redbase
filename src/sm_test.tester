@@ -33,12 +33,12 @@ set OUTPUT = test.out
 #
 
 if ( $#argv == 0 ) then
-   echo "SM layer test sequence" >! $OUTPUT
+   echo "SM layer test sequence"
 
    foreach queryfile ( `ls $TESTSDIR/sm_test.*` )
-      echo running test '#' $queryfile:e '****************' >> $OUTPUT
+      echo running test '#' $queryfile:e '****************' 
       $DBHOME/dbcreate  $TESTDB
-      $DBHOME/redbase   $TESTDB < $queryfile >>& $OUTPUT
+      $DBHOME/redbase   $TESTDB < $queryfile 
       $DBHOME/dbdestroy $TESTDB
    end
 
@@ -49,12 +49,12 @@ if ( $#argv == 0 ) then
 else
    foreach testnum ( $* )
       if ( -r $TESTSDIR/sm_test.$testnum ) then
-         echo running test '#' $testnum '****************' >> $OUTPUT
+         echo running test '#' $testnum '****************'
          $DBHOME/dbcreate  $TESTDB
-         $DBHOME/redbase   $TESTDB < $TESTSDIR/sm_test.$testnum >>& $OUTPUT
+         $DBHOME/redbase   $TESTDB < $TESTSDIR/sm_test.$testnum 
          $DBHOME/dbdestroy $TESTDB
       else
-         echo I can not find a test number $testnum. >> $OUTPUT
+         echo I can not find a test number $testnum. 
       endif
    end
 endif
