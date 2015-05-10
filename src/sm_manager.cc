@@ -21,7 +21,10 @@ SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm) {
 }
 
 SM_Manager::~SM_Manager() {
-    // nothing to do
+    if (isOpen) {
+        rmman->CloseFile(relcat);
+        rmman->CloseFile(attrcat);
+    }
 }
 
 /* Steps - 
@@ -140,13 +143,15 @@ RC SM_Manager::CreateTable(const char *relName,
     }
     // update relcat
     RelationInfo relinfo;
-    strcpy(relinfo.rel_name, relName);
+    strncpy(relinfo.rel_name, relName, MAXNAME+1);
     relinfo.tuple_size = recSize;
     relinfo.num_attr = attrCount;
     relinfo.index_num = -1;
     if (relcat.InsertRec((char*) &relinfo, temp_rid)) {
         return SM_CREATE_ERR; // non-recoverable error, sort of
     }
+    int pnum;
+    SM_ErrorForward(temp_rid.GetPageNum(pnum));
     SM_ErrorForward(relcat.ForcePages(ALL_PAGES));
     SM_ErrorForward(attrcat.ForcePages(ALL_PAGES));
     return OK_RC;
@@ -405,18 +410,19 @@ RC SM_Manager::Print(const char *relName) {
     // check if the relation exists
     if (access(relName, F_OK) != 0) return WARN;
     RM_Record rec;
-    RelationInfo* relinfo;
+    RelationInfo relinfo;
     char* relinfodata;
     SM_ErrorForward(getRelInfo(relName, rec));
     SM_ErrorForward(rec.GetData(relinfodata));
-    relinfo = (RelationInfo*) relinfodata;
+    //relinfo = (RelationInfo*) relinfodata;
+    memcpy(&relinfo, relinfodata, sizeof(RelationInfo));
     // fetch the attributes in the relation
-    DataAttrInfo* attributes = new DataAttrInfo[relinfo->num_attr];
+    DataAttrInfo* attributes = new DataAttrInfo[relinfo.num_attr];
     RM_FileScan attrscan;
     SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
         MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
     char *dinfodata;
-    for (int i = 0; i < relinfo->num_attr; i++) {
+    for (int i = 0; i < relinfo.num_attr; i++) {
         SM_ErrorForward(attrscan.GetNextRec(rec));
         SM_ErrorForward(rec.GetData(dinfodata));
         memcpy(&attributes[i], dinfodata, sizeof(DataAttrInfo));
@@ -424,7 +430,7 @@ RC SM_Manager::Print(const char *relName) {
     SM_ErrorForward(attrscan.CloseScan());
 
     // Instantiate a Printer object and print the header information
-    Printer p(attributes, relinfo->num_attr);
+    Printer p(attributes, relinfo.num_attr);
     p.PrintHeader(cout);
 
     // Open the file and set up the file scan
@@ -470,22 +476,36 @@ RC SM_Manager::Help() {
     if (!isOpen) return SM_DB_CLOSED;
     RM_Record rec;
     // define the pseudo header
-    DataAttrInfo* attributes = new DataAttrInfo();
-    strcpy(attributes->relName,"relcat");
-    strcpy(attributes->attrName,"Relations in database");
-    attributes->offset = 0;
-    attributes->attrType = STRING;
-    attributes->attrLength = MAXNAME + 1;
-    attributes->indexNo = -1;
+    DataAttrInfo* attributes = new DataAttrInfo[3];
+    strcpy(attributes[0].relName,"relcat");
+    strcpy(attributes[0].attrName,"relName");
+    attributes[0].offset = 0;
+    attributes[0].attrType = STRING;
+    attributes[0].attrLength = MAXNAME + 1;
+    attributes[0].indexNo = -1;
+    strcpy(attributes[1].relName,"relcat");
+    strcpy(attributes[1].attrName,"tupleLength");
+    attributes[1].offset = MAXNAME+1;
+    attributes[1].attrType = INT;
+    attributes[1].attrLength = 4;
+    attributes[1].indexNo = -1;
+    strcpy(attributes[2].relName,"relcat");
+    strcpy(attributes[2].attrName,"attrCount");
+    attributes[2].offset = MAXNAME+5;
+    attributes[2].attrType = INT;
+    attributes[2].attrLength = 4;
+    attributes[2].indexNo = -1;
 
     // Instantiate a Printer object and print the header information
-    Printer p(attributes, 1);
+    Printer p(attributes, 3);
     p.PrintHeader(cout);
 
     RM_FileScan relscan;
     SM_ErrorForward(relscan.OpenScan(relcat, STRING, 
         MAXNAME+1, 0, NO_OP, 0, NO_HINT));
     char *data;
+    char *buffer = new char[MAXNAME+9];
+    RelationInfo relinfo;
     RC rc = OK_RC;
 
     // Print each tuple
@@ -497,13 +517,18 @@ RC SM_Manager::Help() {
 
        if (rc!=RM_EOF) {
             SM_ErrorForward(rec.GetData(data));
-            p.Print(cout, data);
+            memcpy(&relinfo, data, sizeof(RelationInfo));
+            strncpy(buffer, relinfo.rel_name, MAXNAME+1);
+            memcpy(buffer+MAXNAME+1, (void*) &relinfo.tuple_size, 4);
+            memcpy(buffer+MAXNAME+5, (void*) &relinfo.num_attr, 4);
+            p.Print(cout, buffer);
         }
     }
     // Print the footer information
     // p.PrintFooter(cout);
     SM_ErrorForward(relscan.CloseScan());
-    delete attributes;
+    delete[] attributes;
+    delete[] buffer;
     return OK_RC;
 }
 
@@ -583,7 +608,8 @@ RC SM_Manager::Help(const char *relName) {
     // Print the footer information
     // p.PrintFooter(cout);
     SM_ErrorForward(attrscan.CloseScan());
-    delete attributes;
+    delete[] attributes;
+    delete[] buffer;
     return OK_RC;
 }
 
