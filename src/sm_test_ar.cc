@@ -84,7 +84,7 @@ RC test2() {
     //SM_TestForward(smm.CreateIndex(relName, a1));
     //SM_TestForward(smm.CreateIndex(relName, a2));
     //SM_TestForward(smm.Print(relName));
-    SM_TestForward(smm.Help());
+    SM_TestForward(smm.Help(relName));
     SM_TestForward(smm.DropTable(relName));
     delete[] attributes;
 }

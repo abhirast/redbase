@@ -537,46 +537,57 @@ RC SM_Manager::Help(const char *relName) {
     if (!isOpen) return SM_DB_CLOSED;
     RM_Record rec;
     // define the pseudo header
-    DataAttrInfo* attributes = new DataAttrInfo[4];
+    DataAttrInfo* attributes = new DataAttrInfo[6];
     strcpy(attributes[0].relName,"attrcat");
-    strcpy(attributes[0].attrName,"Attribute");
+    strcpy(attributes[0].attrName,"relName");
     attributes[0].offset = 0;
     attributes[0].attrType = STRING;
     attributes[0].attrLength = MAXNAME + 1;
     attributes[0].indexNo = -1;
     strcpy(attributes[1].relName,"attrcat");
-    strcpy(attributes[1].attrName,"Type");
+    strcpy(attributes[1].attrName,"attrName");
     attributes[1].offset = MAXNAME + 1;
     attributes[1].attrType = STRING;
-    attributes[1].attrLength = 7;
+    attributes[1].attrLength = MAXNAME + 1;
     attributes[1].indexNo = -1;
     strcpy(attributes[2].relName,"attrcat");
-    strcpy(attributes[2].attrName,"Length");
-    attributes[2].offset = MAXNAME + 8;
+    strcpy(attributes[2].attrName,"offset");
+    attributes[2].offset = 2*MAXNAME + 2;
     attributes[2].attrType = INT;
     attributes[2].attrLength = 4;
     attributes[2].indexNo = -1;
     strcpy(attributes[3].relName,"attrcat");
-    strcpy(attributes[3].attrName,"Indexed?");
-    attributes[3].offset = MAXNAME + 12;
+    strcpy(attributes[3].attrName,"attrType");
+    attributes[3].offset = 2*MAXNAME + 6;
     attributes[3].attrType = STRING;
-    attributes[3].attrLength = 4;
+    attributes[3].attrLength = 7;
     attributes[3].indexNo = -1;
+    strcpy(attributes[4].relName,"attrcat");
+    strcpy(attributes[4].attrName,"attrLength");
+    attributes[4].offset = 2*MAXNAME + 13;
+    attributes[4].attrType = INT;
+    attributes[4].attrLength = 4;
+    attributes[4].indexNo = -1;
+    strcpy(attributes[5].relName,"attrcat");
+    strcpy(attributes[5].attrName,"indexNo");
+    attributes[5].offset = 2*MAXNAME + 17;   
+    attributes[5].attrType = INT;
+    attributes[5].attrLength = 4;
+    attributes[5].indexNo = -1;
     
 
     // Instantiate a Printer object and print the header information
-    Printer p(attributes, 4);
+    Printer p(attributes, 6);
     p.PrintHeader(cout);
 
     RM_FileScan attrscan;
     SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
         MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
     char *data;
+    char *buffer = new char[2*MAXNAME+21];
+    DataAttrInfo dinfo;
     RC rc = OK_RC;
 
-    DataAttrInfo dinfo;
-    char* buffer = new char[MAXNAME + 16];
-    string isindexed, dtype;
     // Print each tuple
     while (rc!=RM_EOF) {
         rc = attrscan.GetNextRec(rec);
@@ -587,21 +598,18 @@ RC SM_Manager::Help(const char *relName) {
        if (rc!=RM_EOF) {
             SM_ErrorForward(rec.GetData(data));
             memcpy(&dinfo, data, sizeof(DataAttrInfo));
+            strncpy(buffer, dinfo.relName, MAXNAME+1);
+            strncpy(buffer+MAXNAME+1, dinfo.attrName, MAXNAME+1);
+            memcpy(buffer+2*MAXNAME+2, (void*) &dinfo.offset, 4);
             if (dinfo.attrType == INT) {
-                dtype = "INT";
+                strncpy(buffer+2*MAXNAME+6, "INT", 7);
+            } else if (dinfo.attrType == FLOAT) {
+                strncpy(buffer+2*MAXNAME+6, "FLOAT", 7);
+            } else {
+                strncpy(buffer+2*MAXNAME+6, "STRING", 7);
             }
-            else if (dinfo.attrType == FLOAT) {
-                dtype = "FLOAT";
-            }
-            else {
-                dtype = "STRING";
-            }
-            isindexed = (dinfo.indexNo>=0)?"yes":"no";
-            // put the values in buffer
-            strncpy(buffer, dinfo.attrName, MAXNAME+1);
-            strncpy(buffer+MAXNAME+1, dtype.c_str(), 7);
-            memcpy(buffer+MAXNAME+8, (void*) &dinfo.attrLength, 4);
-            strncpy(buffer+MAXNAME+12, isindexed.c_str(), 4);
+            memcpy(buffer+2*MAXNAME+13, (void*) &dinfo.attrLength, 4);
+            memcpy(buffer+2*MAXNAME+17, (void*) &dinfo.indexNo, 4);
             p.Print(cout, buffer);
         }
     }
