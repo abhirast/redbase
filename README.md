@@ -1,10 +1,12 @@
 # sm_DOC #
 
 #### Overview ####
-This part provides command line utilities for the user to interact with the database. Internally, the System Management (SM) module acts as a client to RM, IX and PF components and provides functionality such as creating and deleting a database, adding and dropping relations to the database, adding and dropping indices for different attributes of a relation, bulk-loading from a csv file and displaying the contents of a relation on the command line.
+This part provides command line utilities for the user to interact with the database. Internally, the System Management (SM) module acts as a client to RM, IX and PF components and provides functionality such as creating and deleting a database, adding and dropping relations, adding and dropping indices for different attributes of a relation, bulk-loading from a csv file and displaying the contents of a relation on the command line.
 
 #### File Hierarchy ####
-Each database has a separate directory in the redbase home directory. All the files corresponding to the relations and indices on these relations belonging to a database are located within the database's directory. The database directory has two special files called relcat and attrcat, which maintain the catalog of relations present in the database and the schema related information of each relation in the database respectively. As these catalogs are located within the database directory, it is illegal to create relations with these names. However, this can be taken care of by adding a fixed prefix to all relation names (e.g _) before each relations file name and accounting for it while accessing the relation. The index for a relation are stored within the database directory and they are named as relName.indexNum where relName is the name of the relation and indexNum is the index number, which is stored in attrcat. Again, due to the naming convention of the index files, it is illegal to create a relation with a name of the format xxxx.n where n is a number. If we allow creation of relations with these names, they may conflict with the index files of another relation xxxx. 
+Each database has a separate directory in the redbase home directory. All the files corresponding to the relations and indices on these relations belonging to a database are located within the database's directory. The database directory has two special relations called relcat and attrcat, which maintain the catalog of relations present in the database and the schema related information of each relation in the database respectively. As these catalogs are located within the database directory, it is illegal to create relations with these names. 
+
+The index for a relation are stored within the database directory and they are named as relName.indexNum where relName is the name of the relation and indexNum is the index number, which is stored in attrcat. Again, due to the naming convention of the index files, it is illegal to create a relation with a name of the format xxxx.n where n is a number. If we allow creation of relations with these names, they may conflict with the index files of another relation xxxx. However, after ny implementation, I found out that the parser prohibits relation names containing a dot. With my implementation, such names could be allowed without creating conflicts with the index files.
 
 #### Catalog Management ####
 The relation catalog (relcat) of each database, stores the (i) relation name, (ii) tuple size, (iii) number of attributes and (iv) maximum allotted index number for each relation. The index number is used to keep track of the number to be allotted to a newly created index. This number increases by 1 each time a new index is created. Thus if we repeatedly create and drop the index on a particular attribute of a relation, the index number would keep increasing. 
@@ -16,7 +18,11 @@ The user can interact with redbase using three commands which are provided by sm
 
 #### Debugging ####
 
-I wrote a C++ script to carry out many tests on methods of SM_Manager. These tests work like the tests for RM and IX part and get compiled after slightly modifying the ql_stub.cc (removing all couts, didn't spend time on thinking why). To operate these tests, one must create a db using the createdb command and then input the db name in the test file and compile. This process can be automated but I didn't spend time on it. My test suite does the following tests - 
+I wrote a C++ script to test and debug SM_Manager under many different scenarios. These tests work like the tests for RM and IX part and get compiled after slightly modifying the ql_stub.cc (removing all couts, didn't spend time on thinking why). To operate these tests, one must create a db using the createdb command and then input the db name in the test file and compile. This process can be automated but I didn't spend time on it. This helped me in debugging my code using ddd. After debugging my implementation, I ran tests using the tester script provided to us. I modified some of the given data files so that they contain null attributes in many different positions as well as the cases when all attributes in a line are null. I also used valgrind to test for memory leaks.
+
+#### Acknowledgements ####
+I would like to thank Jaeho for discussion on some implementation aspects.
+
 
 # ix_DOC #
 
