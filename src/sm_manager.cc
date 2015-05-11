@@ -293,6 +293,7 @@ RC SM_Manager::DropIndex(const char *relName,
     DataAttrInfo dinfo;
     RM_Record rec;
     SM_ErrorForward(getAttrInfo(relName, attrName, dinfo, rec));
+    if (dinfo.indexNo < 0) return WARN;
     // delete the index
     SM_ErrorForward(ixman->DestroyIndex(relName, dinfo.indexNo));
     // update catalog
@@ -539,6 +540,7 @@ RC SM_Manager::Help() {
 RC SM_Manager::Help(const char *relName) {
     RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
     if (!isOpen) return SM_DB_CLOSED;
+    if (access(relName, F_OK) != 0) return SM_RELATION_NOT_FOUND;
     RM_Record rec;
     // define the pseudo header
     DataAttrInfo* attributes = new DataAttrInfo[6];
@@ -656,4 +658,5 @@ RC SM_Manager::getAttrInfo(const char* relName, const char* attrName,
     if (!found) return WARN;
     return OK_RC;
 }
+
 
