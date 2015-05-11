@@ -20,7 +20,9 @@ static char *SM_WarnMsg[] = {
   (char*)"recoverable error while loading into a relation",
   (char*)"relation with the given name already exists",
   (char*)"the given relation doesn't exist",
-  (char*)"the relation doesn't have the given attribute"
+  (char*)"the relation doesn't have the given attribute",
+  (char*)"recoverable error while printing relation",
+  (char*)"the given function hasn't been implemented"
 };
 
 static char *SM_ErrorMsg[] = {
@@ -30,7 +32,8 @@ static char *SM_ErrorMsg[] = {
   (char*)"fatal error while dropping relation",
   (char*)"fatal error while creating index",
   (char*)"fatal error while dropping index",
-  (char*)"fatal error while loading into a relation"
+  (char*)"fatal error while loading into a relation",
+  (char*)"fatal error while printing relation"
 };
 
 // Sends a message to cerr which corresponds to an error code

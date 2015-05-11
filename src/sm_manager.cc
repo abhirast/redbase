@@ -82,9 +82,6 @@ RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes) {
     RC WARN = SM_CREATE_WARN, ERR = SM_CREATE_ERR;
-    cout << "CreateTable\n"
-         << "   relName     =" << relName << "\n"
-         << "   attrCount   =" << attrCount << "\n";
     for (int i = 0; i < attrCount; i++) {
         cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
              << "   attrType="
@@ -170,7 +167,6 @@ RC SM_Manager::CreateTable(const char *relName,
     6. Delete the indexes
 */
 RC SM_Manager::DropTable(const char *relName) {
-    cout << "DropTable\n   relName=" << relName << "\n";
     RC WARN = SM_DROP_WARN, ERR = SM_DROP_ERR;
     // check if the database is open
     if (!isOpen) return SM_DB_CLOSED;
@@ -216,9 +212,6 @@ RC SM_Manager::DropTable(const char *relName) {
 */
 RC SM_Manager::CreateIndex(const char *relName,
                            const char *attrName) {
-    cout << "CreateIndex\n"
-         << "   relName =" << relName << "\n"
-         << "   attrName=" << attrName << "\n";
     RC WARN = SM_IXCREATE_WARN, ERR = SM_IXCREATE_ERR;
     // check if the database is open
     if (!isOpen) return SM_DB_CLOSED;
@@ -281,9 +274,6 @@ RC SM_Manager::CreateIndex(const char *relName,
 */
 RC SM_Manager::DropIndex(const char *relName,
                          const char *attrName) {
-    cout << "DropIndex\n"
-         << "   relName =" << relName << "\n"
-         << "   attrName=" << attrName << "\n";
     RC WARN = SM_IXDROP_WARN, ERR = SM_IXDROP_ERR;
     // check if the database is open
     if (!isOpen) return SM_DB_CLOSED;
@@ -314,9 +304,6 @@ RC SM_Manager::DropIndex(const char *relName,
 */
 RC SM_Manager::Load(const char *relName,
                     const char *fileName) {
-    cout << "Load\n"
-         << "   relName =" << relName << "\n"
-         << "   fileName=" << fileName << "\n";
     RC WARN = SM_LOAD_WARN, ERR = SM_LOAD_ERR;
     // check if the database is open
     if (!isOpen) return SM_DB_CLOSED;
@@ -408,8 +395,6 @@ RC SM_Manager::Load(const char *relName,
 }
 
 RC SM_Manager::Print(const char *relName) {
-    cout << "Print\n"
-         << "   relName=" << relName << "\n";
     RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
     if (!isOpen) return SM_DB_CLOSED;
     // check if the relation exists
@@ -469,14 +454,10 @@ RC SM_Manager::Print(const char *relName) {
 }
 
 RC SM_Manager::Set(const char *paramName, const char *value) {
-    cout << "Set\n"
-         << "   paramName=" << paramName << "\n"
-         << "   value    =" << value << "\n";
     return SM_NOT_IMPLEMENTED;
 }
 
 RC SM_Manager::Help() {
-    cout << "Help\n";
     RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
     if (!isOpen) return SM_DB_CLOSED;
     RM_Record rec;

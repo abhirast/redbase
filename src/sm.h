@@ -102,9 +102,9 @@ if (tmp_rc != OK_RC) \
 #define SM_DUPLICATE_RELATION               (START_SM_WARN + 9)
 #define SM_RELATION_NOT_FOUND               (START_SM_WARN + 10)
 #define SM_ATTRIBUTE_NOT_FOUND              (START_SM_WARN + 11)
-#define SM_PRINT_WARN                       (START_SM_WARN + 11)
-#define SM_NOT_IMPLEMENTED                  (START_SM_WARN + 11)
-#define SM_LASTWARN                         SM_ATTRIBUTE_NOT_FOUND
+#define SM_PRINT_WARN                       (START_SM_WARN + 12)
+#define SM_NOT_IMPLEMENTED                  (START_SM_WARN + 13)
+#define SM_LASTWARN                         SM_NOT_IMPLEMENTED
 
 #define SM_CREATE_ERR                       (START_SM_ERR - 0)
 #define SM_OPEN_ERR                         (START_SM_ERR - 1)
@@ -113,8 +113,8 @@ if (tmp_rc != OK_RC) \
 #define SM_IXCREATE_ERR                     (START_SM_ERR - 4)
 #define SM_IXDROP_ERR                       (START_SM_ERR - 5)
 #define SM_LOAD_ERR                         (START_SM_ERR - 6)
-#define SM_PRINT_ERR                        (START_SM_ERR - 6)
-#define SM_LASTERROR                        SM_LOAD_ERR
+#define SM_PRINT_ERR                        (START_SM_ERR - 7)
+#define SM_LASTERROR                        SM_PRINT_ERR
 
 
 #endif
