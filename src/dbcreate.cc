@@ -5,10 +5,14 @@
 //
 // This shell is provided for the student.
 
-#include <iostream>
 #include <cstdio>
+#include <iostream>
+#include <vector>
+#include <fstream>
 #include <cstring>
+#include <algorithm>
 #include <unistd.h>
+#include <sstream>
 #include "rm.h"
 #include "sm.h"
 #include "redbase.h"
@@ -78,5 +82,68 @@ int main(int argc, char *argv[]) {
     if (rmm.CreateFile(attrcat, sizeof(DataAttrInfo)) != 0) {
         cerr<<"Error while creating attrcat\n";
     }
+
+    // open the files 
+    RM_FileHandle relc, attc;
+    if ((rmm.OpenFile(relcat, relc)) ||
+    (rmm.OpenFile(attrcat, attc))) {
+        cout<<"Error while creating database\n";
+        return 1;
+    }
+
+    // update relcat
+    RelationInfo relinfo1, relinfo2;
+    RID temp_rid;
+    strncpy(relinfo1.rel_name, relcat, MAXNAME+1);
+    relinfo1.tuple_size = sizeof(RelationInfo);
+    relinfo1.num_attr = 4;
+    relinfo1.index_num = -1;
+    strncpy(relinfo2.rel_name, attrcat, MAXNAME+1);
+    relinfo2.tuple_size = sizeof(DataAttrInfo);
+    relinfo2.num_attr = 6;
+    relinfo2.index_num = -1;
+    if (relc.InsertRec((char*) &relinfo1, temp_rid) ||
+        relc.InsertRec((char*) &relinfo2, temp_rid)) {
+        cout<<"Error while creating database\n";
+        return 1;
+    }
+
+    // Update Attrcat
+    DataAttrInfo attr[10];
+    const char *anames[] = {"relName", "tupleLength", "attrCount", 
+        "indexNo", "relName", "attrName", "offset", "attrType", 
+        "attrLength", "indexNo"};
+    int stl = (char*) &relinfo1.tuple_size - (char*) &relinfo1;
+    int attl = sizeof(AttrType);
+    int offsets[] = {0, stl, stl+4, stl+8, 0, stl, 2*stl, 
+        2*stl+4, 2*stl+4+attl, 2*stl+8+attl};
+    int attrlengths[] = {stl, 4, 4, 4, stl, stl, 4, attl, 4, 4};
+    AttrType attypes[] = {STRING, INT, INT, INT, STRING, STRING,
+        INT, INT, INT, INT};
+    for (int i = 0; i < 10; i++) {
+        if (i < 4) {
+            strncpy(attr[i].relName, relcat, MAXNAME+1);
+        } else {
+            strncpy(attr[i].relName, attrcat, MAXNAME+1);
+        }
+        strncpy(attr[i].attrName, (char*) anames[i], MAXNAME+1);
+        attr[i].offset = offsets[i];
+        attr[i].attrType = attypes[i];
+        attr[i].attrLength = attrlengths[i];
+        attr[i].indexNo = -1;
+        if (attc.InsertRec((char*) &attr[i], temp_rid)) {
+            cout<<"Error while creating database\n";
+        }
+    }
+
+    if (relc.ForcePages(ALL_PAGES) || attc.ForcePages(ALL_PAGES)) {
+        cout<<"Error while creating database\n";
+        return 1;
+    }
+    if (rmm.CloseFile(relc) || rmm.CloseFile(attc)) {
+        cout<<"Error while creating database\n";
+        return 1;
+    }
+
     return 0;
 }

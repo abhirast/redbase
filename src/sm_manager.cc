@@ -111,6 +111,10 @@ RC SM_Manager::CreateTable(const char *relName,
     // check if the relname already exists and is of right size
     if (access(relName, F_OK) == 0) return SM_DUPLICATE_RELATION;
     if (strlen(relName) > MAXNAME) return SM_BAD_INPUT;
+    // check for conflicts with index
+    int index = strlen(relName) - 1;
+    while (index >= 0 && isdigit((unsigned char) relName[index])) index--;
+    if (relName[index] == '.' && index > 0) return SM_BAD_INPUT;
     // do sanity checks of parameters
     int recSize = 0;
     for (int i = 0; i < attrCount; i++) {
@@ -559,18 +563,18 @@ RC SM_Manager::Help(const char *relName) {
     strcpy(attributes[3].relName,"attrcat");
     strcpy(attributes[3].attrName,"attrType");
     attributes[3].offset = 2*MAXNAME + 6;
-    attributes[3].attrType = STRING;
-    attributes[3].attrLength = 7;
+    attributes[3].attrType = INT;
+    attributes[3].attrLength = 4;
     attributes[3].indexNo = -1;
     strcpy(attributes[4].relName,"attrcat");
     strcpy(attributes[4].attrName,"attrLength");
-    attributes[4].offset = 2*MAXNAME + 13;
+    attributes[4].offset = 2*MAXNAME + 10;
     attributes[4].attrType = INT;
     attributes[4].attrLength = 4;
     attributes[4].indexNo = -1;
     strcpy(attributes[5].relName,"attrcat");
     strcpy(attributes[5].attrName,"indexNo");
-    attributes[5].offset = 2*MAXNAME + 17;   
+    attributes[5].offset = 2*MAXNAME + 14;   
     attributes[5].attrType = INT;
     attributes[5].attrLength = 4;
     attributes[5].indexNo = -1;
@@ -584,7 +588,7 @@ RC SM_Manager::Help(const char *relName) {
     SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
         MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
     char *data;
-    char *buffer = new char[2*MAXNAME+21];
+    char *buffer = new char[2*MAXNAME+18];
     DataAttrInfo dinfo;
     RC rc = OK_RC;
 
@@ -601,15 +605,9 @@ RC SM_Manager::Help(const char *relName) {
             strncpy(buffer, dinfo.relName, MAXNAME+1);
             strncpy(buffer+MAXNAME+1, dinfo.attrName, MAXNAME+1);
             memcpy(buffer+2*MAXNAME+2, (void*) &dinfo.offset, 4);
-            if (dinfo.attrType == INT) {
-                strncpy(buffer+2*MAXNAME+6, "INT", 7);
-            } else if (dinfo.attrType == FLOAT) {
-                strncpy(buffer+2*MAXNAME+6, "FLOAT", 7);
-            } else {
-                strncpy(buffer+2*MAXNAME+6, "STRING", 7);
-            }
-            memcpy(buffer+2*MAXNAME+13, (void*) &dinfo.attrLength, 4);
-            memcpy(buffer+2*MAXNAME+17, (void*) &dinfo.indexNo, 4);
+            memcpy(buffer+2*MAXNAME+6, (void*) &dinfo.attrType, 4);
+            memcpy(buffer+2*MAXNAME+10, (void*) &dinfo.attrLength, 4);
+            memcpy(buffer+2*MAXNAME+14, (void*) &dinfo.indexNo, 4);
             p.Print(cout, buffer);
         }
     }
