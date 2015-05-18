@@ -511,7 +511,7 @@ RC SM_Manager::Help() {
         }
     }
     // Print the footer information
-    // p.PrintFooter(cout);
+    p.PrintFooter(cout);
     SM_ErrorForward(relscan.CloseScan());
     delete[] attributes;
     delete[] buffer;
@@ -595,7 +595,7 @@ RC SM_Manager::Help(const char *relName) {
         }
     }
     // Print the footer information
-    // p.PrintFooter(cout);
+    p.PrintFooter(cout);
     SM_ErrorForward(attrscan.CloseScan());
     delete[] attributes;
     delete[] buffer;
