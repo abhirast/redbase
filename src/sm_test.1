@@ -1,0 +1,26 @@
+/*
+ * sm_test.1: tests load and print
+ */
+
+/* create some relations */
+create table soaps(soapid  i, sname  c28, network  c4, rating  f);
+
+/* load tuples from ./tests/stars.data */
+load soaps("../soaps.data");
+
+/* print out contents of soaps */
+print soaps;
+
+/* build some indices on stars */
+create index stars(starid);
+create index stars(stname);
+
+/* load tuples from ./tests/stars.data */
+load stars("../stars.data");
+
+/* print out contents of stars */
+print stars;
+
+!ls;
+
+exit;

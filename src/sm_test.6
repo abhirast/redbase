@@ -1,0 +1,51 @@
+/*
+ * sm_test.6: tests error checking
+ */
+
+/* do you check for duplicated attribute names? */
+create table ned (ted c24, ted i);
+
+/* do you check for duplicated relation names? */
+create table ned (ted c24, jed i);     /* <-- this should succeed */
+create table ned (ted c24, jed i);
+
+/* can you drop nonexistent relations? */
+drop table jed;
+
+/* can you drop a relation more than once? */
+drop table ned;	/* <-- this should succeed */
+drop table ned;
+
+/* recreate ned (this should succeed) */
+create table ned (ted c24, jed i);
+
+/* can you create indices on nonexistent attributes? */
+create index ned(ed);
+
+/* can you build indices on attributes that are already indexed? */
+create index ned(ted);			/* <-- this should succeed */
+create index ned(ted);
+
+/* can you load from nonexistent files? */
+load ned ("./no-such-file");
+
+/* can you load into nonexistent relations? */
+load ed ("../datafiles/soaps.data");
+
+/* can you get help on nonexistent relations? */
+help jed;
+
+/* can you delete indices on attributes that aren't indexed? */
+help ned;
+drop index ned(ted);			/* <-- this should succeed */
+drop index ned(ted);
+
+/* the rest should all succeed */
+
+/* what sort of condition are things left in? */
+help;
+help ned;
+
+!ls
+
+exit;

@@ -194,7 +194,23 @@ RC RM_FileHandle::UpdateRec(const RM_Record &rec) {
 RC RM_FileHandle::ForcePages (int pageNum) const{
 	RC WARN = RM_FORCEPAGE_FAIL, ERR = RM_FILEHANDLE_FATAL; // used by macro
 	if (bIsOpen == 0) return RM_FILE_NOT_OPEN;
-	RM_ErrorForward(pf_fh.ForcePages(pageNum));
+	if (bHeaderChanged) {
+        PF_PageHandle header;
+        int header_pnum = fHdr.header_pnum;
+        RM_ErrorForward(pf_fh.GetThisPage(header_pnum, header));
+        // update the header
+        RM_ErrorForward(pf_fh.MarkDirty(header_pnum));
+        char *contents;
+        RM_ErrorForward(header.GetData(contents));
+        memcpy(contents, &fHdr, sizeof(RM_FileHdr));
+        // unpin the header
+        RM_ErrorForward(pf_fh.UnpinPage(header_pnum));
+    }
+    if (pageNum == ALL_PAGES) {
+    	RM_ErrorForward(pf_fh.FlushPages());
+    } else {
+		RM_ErrorForward(pf_fh.ForcePages(pageNum));
+	}
 	return OK_RC;
 }
 

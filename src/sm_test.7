@@ -1,0 +1,39 @@
+/* First we create two tables with plenty of attributes */
+
+create table Store(storeID i, name c30, streetNum i, street c50, city c30, state c2, avgUnitsPerYearSold f);
+
+create table Player(AARAmembership i, name c30, streetNum i, street c50, city c30, state c2, sponsorshipType i);
+
+/*  Ensure that all tables were created */
+/*help;*/
+
+/*  Indexes on each table */
+
+create index Store(storeID);
+
+create index Player(AARAmembership);
+
+/*  Ensure that all indexes were created */
+/*help;*/
+
+/* Populate the tables with _large_ datafiles */
+
+load Store("../store.data");
+
+load Player("../player.data");
+
+/* Now print the smaller table */
+print Store;
+print Player;
+
+/* Drop one of the indexes */
+drop index Player(AARAmembership);
+
+/* Destroy the tables */
+drop table Player;
+drop table Store;
+
+/* Ensure that everything is gone! */
+!ls
+
+exit;

@@ -1,0 +1,33 @@
+/*
+ * sm_test.5: tests create index and destroy index
+ */
+
+/* create some relations */
+create table soaps(soapid i, sname c28, network c4, rating f);
+create table stars(starid i, stname c20, plays c12, soapid i);
+
+/* create some indices */
+create index soaps(network);
+create index soaps(soapid);
+help soaps;
+
+create index stars(stname);
+help stars;
+
+help;
+
+!ls
+
+/* destroy the indices */
+drop index soaps(network);
+help soaps;
+
+drop index stars(stname);
+help stars;
+
+create index soaps(network);
+help soaps;
+
+!ls;
+
+exit;

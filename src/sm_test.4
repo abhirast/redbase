@@ -1,0 +1,23 @@
+/*
+ * sm_test.4: tests destroy
+ */
+
+/* create some relations */
+create table soaps(soapid i, sname c28, network c4, rating f);
+create table stars(starid i, stname c20, plays c12, soapid i);
+
+/* make sure they made it into the catalog */
+help soaps;
+help stars;
+
+/* destroy the relations */
+drop table stars;
+help;
+
+drop table soaps;
+help;
+
+/* make sure the files got removed */
+!ls
+
+exit;

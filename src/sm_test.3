@@ -1,0 +1,22 @@
+/*
+ * sm_test.3: tests create and help
+ */
+
+/* create a simple relation */
+create table easy (one c24);
+
+/* list the directory to see if anything got created */
+!ls
+
+/* see if it shows up in the catalog */
+help easy;
+
+/* create a larger relation */
+create table harder (one c23, two i, three f, four c100);
+
+/* same stuff */
+!ls
+help harder;
+
+help;
+exit;
