@@ -30,10 +30,18 @@ void test1() {
 	IX_Error(ixm.CreateIndex(filename, index, INT, sizeof(int)));
 	IX_Error(ixm.OpenIndex(filename, index, ih));
     // insert the records
-	for (int i = 0; i < 9; i++) {
-		RID rid(keys[i]+1, keys[i]+1);
-		int x = keys[i]+1;
+	for (int i = 1; i < 100; i++) {
+		RID rid(2*i+100, 2*i+100);
+		int x = i+1;
 		IX_Error(ih.InsertEntry((void*) &x, rid));
+	}
+
+	for (int i = 1; i < 10; i++) {
+	for (int j = 1; j < 3; j++) {
+		RID rid(2*i+j+1, 2*i+j+1);
+		int x = i+1;
+		IX_Error(ih.InsertEntry((void*) &x, rid));
+	}
 	}
 	IX_Error(ih.ForcePages());
 	// scan the records
@@ -166,6 +174,6 @@ void test4() {
 }
 
 int main() {
-	test4();
+	test1();
 	return 0;
 }
