@@ -318,24 +318,8 @@ RC SM_Manager::Load(const char *relName,
     relinfo = (RelationInfo*) relinfodata;
     // fetch the attributes in the relation
     vector<DataAttrInfo> attributes;
-    RM_FileScan attrscan;
-    SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
-        MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
-    DataAttrInfo dinfo;
-    char *dinfodata;
-    bool found = false;
-    while(attrscan.GetNextRec(rec) == OK_RC) {
-        found = true;
-        SM_ErrorForward(rec.GetData(dinfodata));
-        // dinfo = (DataAttrInfo) &dinfodata;
-        memcpy(&dinfo, dinfodata, sizeof(DataAttrInfo));
-        attributes.push_back(dinfo);
-    }
-    SM_ErrorForward(attrscan.CloseScan());
-    if (!found) return WARN;
-    // sort the attributes accourding to offset, defined in DataAttrInfo
-    sort(attributes.begin(), attributes.end());
-    // keep track of indexed attributes, initialize their indexhandles
+    SM_ErrorForward(getAttributes(relName, attributes));
+    
     vector<int> ind;
     vector<IX_IndexHandle> ihandles(attributes.size());
     for (size_t i = 0; i < attributes.size(); i++) {
@@ -640,4 +624,36 @@ RC SM_Manager::getAttrInfo(const char* relName, const char* attrName,
     return OK_RC;
 }
 
+RC SM_Manager::getAttributes(const char *relName, vector<DataAttrInfo> &attributes) {
+    RC WARN = SM_ATTRIBUTE_NOT_FOUND, ERR = SM_ATTRIBUTE_NOT_FOUND;
+    RM_FileScan attrscan;
+    RM_Record rec;
+    SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
+        MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
+    DataAttrInfo dinfo;
+    char *dinfodata;
+    bool found = false;
+    while(attrscan.GetNextRec(rec) == OK_RC) {
+        found = true;
+        SM_ErrorForward(rec.GetData(dinfodata));
+        // dinfo = (DataAttrInfo) &dinfodata;
+        memcpy(&dinfo, dinfodata, sizeof(DataAttrInfo));
+        attributes.push_back(dinfo);
+    }
+    SM_ErrorForward(attrscan.CloseScan());
+    if (!found) return WARN;
+    // sort the attributes accourding to offset, defined in DataAttrInfo
+    sort(attributes.begin(), attributes.end());
+    return OK_RC;
+}
 
+
+RC SM_Manager::getRelation(const char* relName, RelationInfo &relation) {
+    RC WARN = SM_RELATION_NOT_FOUND, ERR = SM_RELATION_NOT_FOUND;
+    RM_Record rec;
+    SM_ErrorForward(getRelInfo(relName, rec));
+    char *relinfodata;
+    SM_ErrorForward(rec.GetData(relinfodata));
+    memcpy(&relation, relinfodata, sizeof(RelationInfo));
+    return OK_RC;
+}

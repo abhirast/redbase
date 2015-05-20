@@ -10,6 +10,8 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <cstdio>
+#include <iostream>
 #include "redbase.h"
 #include "parser.h"
 #include "rm.h"
@@ -48,11 +50,38 @@ public:
         const Condition conditions[]);   // conditions in where clause
 
 private:
+    RM_Manager* rmm;
+    IX_Manager* ixm;
+    SM_Manager* smm;
 };
+
+
+// Macro for error forwarding
+// WARN and ERR to be defined in the context where macro is used
+#define QL_ErrorForward(expr) do { \
+RC tmp_rc = (expr);\
+if (tmp_rc != OK_RC) \
+    return ((tmp_rc > 0) ? WARN : ERR); \
+} while (0)
+
 
 //
 // Print-error function
 //
 void QL_PrintError(RC rc);
+
+// Error codes
+
+#define QL_INSERT_WARN                400
+#define QL_CAT_WARN                   400
+#define QL_INVALID_WARN               400
+
+
+
+
+
+
+
+#define QL_INSERT_ERR                -400
 
 #endif

@@ -39,10 +39,10 @@ RM_SOURCES     = rm_filehandle.cc rm_manager.cc rm_record.cc \
 IX_SOURCES     = ix_indexhandle.cc ix_indexscan.cc ix_manager.cc \
 				 ix_printerror.cc
 SM_SOURCES     = sm_manager.cc printer.cc sm_printerror.cc
-QL_SOURCES     = ql_manager_stub.cc
-UTILS_SOURCES  = dbcreate.cc dbdestroy.cc redbase.cc sm_test_ar.cc
+QL_SOURCES     = ql_manager.cc
+UTILS_SOURCES  = dbcreate.cc dbdestroy.cc redbase.cc
 PARSER_SOURCES = scan.c parse.c nodes.c interp.c
-TESTER_SOURCES = parser_test.cc 
+TESTER_SOURCES = parser_test.cc
 
 PF_OBJECTS     = $(addprefix $(BUILD_DIR), $(PF_SOURCES:.cc=.o))
 RM_OBJECTS     = $(addprefix $(BUILD_DIR), $(RM_SOURCES:.cc=.o))

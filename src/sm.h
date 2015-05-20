@@ -10,6 +10,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 #include "redbase.h"  // Please don't change these lines
 #include "parser.h"
 #include "rm.h"
@@ -71,6 +72,8 @@ private:
     RC getRelInfo(const char* relName, RM_Record &rec);
     RC getAttrInfo(const char* relName, const char* attrName, 
                 DataAttrInfo &dinfo, RM_Record &rec); 
+    RC getAttributes(const char *relName, std::vector<DataAttrInfo> &attributes);
+    RC getRelation(const char* relName, RelationInfo &relation);
 };
 
 //
