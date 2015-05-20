@@ -82,13 +82,7 @@ RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes) {
     RC WARN = SM_CREATE_WARN, ERR = SM_CREATE_ERR;
-    for (int i = 0; i < attrCount; i++) {
-        cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
-             << "   attrType="
-             << (attributes[i].attrType == INT ? "INT" :
-                 attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
-             << "   attrLength=" << attributes[i].attrLength << "\n";
-    }
+    
     if (attrCount < 1) return SM_BAD_INPUT;
     // check for duplicate attribute name
     for (int i = 0; i < attrCount; i++) {
