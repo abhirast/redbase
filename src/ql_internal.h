@@ -7,6 +7,9 @@
 #ifndef QL_INT_H
 #define QL_INT_H
 
+/////////////////////////////////////////////////////
+// Base Operator Classes
+/////////////////////////////////////////////////////
 class QL_Op {
 public:
 	virtual ~QL_Op() {};
@@ -21,7 +24,7 @@ public:
 
 
 class QL_UnaryOp : public QL_Op {
-protected:
+public:
     std::shared_ptr<QL_Op> child;
 };
 
@@ -32,16 +35,20 @@ public:
         lchild.reset(&left);
         rchild.reset(&right);
     }
-protected:
     std::shared_ptr<QL_Op> lchild;
     std::shared_ptr<QL_Op> rchild;
 };
 
+/////////////////////////////////////////////////////
+// Scan Operators - Leaf operators
+/////////////////////////////////////////////////////
 
 class QL_FileScan: public QL_UnaryOp {
 public:
-	QL_FileScan(RM_FileHandle &fh, AttrType type, int len, int offset, 
+	QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex, 
 		CompOp cmp, void* value, ClientHint hint, 
+		const std::vector<DataAttrInfo> &attributes);
+	QL_FileScan(RM_Manager *rmm, const char *relName,  
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_FileScan();
 	RC Open();
@@ -49,7 +56,9 @@ public:
 	RC Next(std::shared_ptr<char> &rec, RID &rid);
 	RC Close();
 private:
-	RM_FileHandle *fh;
+	std::string relName;
+	RM_Manager *rmm;
+	RM_FileHandle fh;
 	AttrType type;
 	int len;
 	int offset;
@@ -63,8 +72,8 @@ private:
 
 class QL_IndexScan: public QL_UnaryOp {
 public:
-	QL_IndexScan(RM_FileHandle &fh, IX_IndexHandle &ih, 
-		CompOp cmp, void* value, ClientHint hint, 
+	QL_IndexScan(RM_Manager *rmm, IX_Manager *ixm, const char *relName, 
+		int attrIndex, CompOp cmp, void* value, ClientHint hint, 
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_IndexScan();
 	RC Open();
@@ -72,13 +81,35 @@ public:
 	RC Next(std::shared_ptr<char> &rec, RID &rid);
 	RC Close();
 private:
-	RM_FileHandle *fh;
-	IX_IndexHandle *ih;
+	std::string relName;
+	int indexNo;
+	RM_Manager *rmm;
+	IX_Manager *ixm;
+	RM_FileHandle fh;
+	IX_IndexHandle ih;
 	IX_IndexScan is;
 	CompOp cmp;
 	void *value;
 	ClientHint hint;
 	bool isOpen;
 };
+
+/////////////////////////////////////////////////////
+// Conditional select operator
+/////////////////////////////////////////////////////
+
+class QL_Condition: public QL_UnaryOp {
+public:
+	QL_Condition(QL_Op &child, Condition cond,
+		const std::vector<DataAttrInfo> &attributes);
+	~QL_Condition();
+	RC Open();
+	RC Next(std::shared_ptr<char> &rec);
+	RC Close();
+private:
+	bool isOpen;
+	Condition cond;
+};
+
 
 #endif

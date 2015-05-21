@@ -40,13 +40,15 @@ QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm) {
 QL_Manager::~QL_Manager() {
 }
 
-//
-// Handle the select clause
-//
+/*
+    Handle the select clause
+    Construct a naive operator tree and then optimize it using a set of
+    heuristics
+*/
 RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nRelations, const char * const relations[],
                       int nConditions, const Condition conditions[]) {
-    /* 
+    
     int i;
     cout << "Select\n";
     cout << "   nSelAttrs = " << nSelAttrs << "\n";
@@ -58,7 +60,16 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-    */
+    
+    // Validate the inputs
+    // check if selAttrs are valid and distinct
+    if (strcmp(selAttrs[0].attrName, "*") != 0) {
+        for (int i = 0; i < nSelAttrs; i++) {
+
+        }
+    }
+    // check if relations are valid and distinct
+    // check if conditions are valid and involve from clause relations
 
 
     return OK_RC;
@@ -228,8 +239,8 @@ RC QL_Manager::Delete(const char *relName,
         if (!found) cmp = NO_OP;
         
         dinfo = &attributes[attrInd];
-        scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
-            dinfo->offset, cmp, value, NO_HINT, attributes));
+        scanner.reset(new QL_FileScan(rmm, relName, attrInd,
+            cmp, value, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;
         }
@@ -239,7 +250,7 @@ RC QL_Manager::Delete(const char *relName,
         CompOp cmp = conditions[idxno].op;
         int attrInd = findAttr(conditions[idxno].lhsAttr.attrName, 
                                     attributes);
-        scanner.reset(new QL_IndexScan(relh, ihandles[attrInd], cmp, 
+        scanner.reset(new QL_IndexScan(rmm, ixm, relName, attrInd, cmp, 
             conditions[idxno].rhsValue.data, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"INDEX SCAN ON "<<attributes[attrInd].attrName<<endl;
@@ -332,20 +343,15 @@ RC QL_Manager::Update(const char *relName,
     }
     if (bQueryPlans) printPlanHeader("UPDATE ", relName);
     // Now all inputs are valid, set up the appropriate scan
-    RM_FileHandle relh;
-    IX_IndexHandle scan_indh;
-    QL_ErrorForward(rmm->OpenFile(relName, relh));
-    int indexCond = -1;
+    int indexCond = -1, attrIndex = -1;
     for (int i = 0; i < nConditions; i++) {
-        if (bIsValue) continue;
+        if (!bIsValue) continue;
         if (strcmp(conditions[i].lhsAttr.attrName, updAttr.attrName) == 0)
             continue;
         if (conditions[i].op != EQ_OP) continue;
-        int attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
-        if (attributes[attrInd].indexNo >=0) {
+        attrIndex = findAttr(conditions[i].lhsAttr.attrName, attributes);
+        if (attributes[attrIndex].indexNo >=0) {
             indexCond = i;
-            QL_ErrorForward(ixm->OpenIndex(relName, 
-                 attributes[attrInd].indexNo, scan_indh));
             break;
         }
     }
@@ -370,8 +376,8 @@ RC QL_Manager::Update(const char *relName,
         
         if (!found) cmp = NO_OP;
         dinfo = &attributes[attrInd];
-        scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
-            dinfo->offset, cmp, value, NO_HINT, attributes));
+        scanner.reset(new QL_FileScan(rmm, relName, attrInd, 
+            cmp, value, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;
         }
@@ -380,7 +386,7 @@ RC QL_Manager::Update(const char *relName,
     else {
         // use index scan
         CompOp cmp = conditions[indexCond].op;
-        scanner.reset(new QL_IndexScan(relh, scan_indh, cmp, 
+        scanner.reset(new QL_IndexScan(rmm, ixm, relName, attrIndex, cmp, 
             conditions[indexCond].rhsValue.data, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"INDEX SCAN ON "<<conditions[indexCond].lhsAttr.attrName<<endl;
@@ -388,6 +394,8 @@ RC QL_Manager::Update(const char *relName,
     }
     if (bQueryPlans) printPlanFooter();
     // define and open the index handle for updated attribute if exists
+    RM_FileHandle relh;
+    QL_ErrorForward(rmm->OpenFile(relName, relh));
     IX_IndexHandle update_indh;
     if (attributes[upInd].indexNo >= 0) {
         QL_ErrorForward(ixm->OpenIndex(relName, 
@@ -491,7 +499,7 @@ void QL_PrintError(RC rc)
 }while(0)
 
 // copies the contents into char array and null terminates it
-void QL_Manager::buffer(void *ptr, char* buff, int len) const{
+void QL_Manager::buffer(void *ptr, char* buff, int len) {
     buff[len] = '\0';
     memcpy(buff, ptr, len);
     return;
@@ -499,27 +507,27 @@ void QL_Manager::buffer(void *ptr, char* buff, int len) const{
 
 // operators for comparison
 bool QL_Manager::eq_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(==);
 }
 bool QL_Manager::ne_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(!=);
 }
 bool QL_Manager::lt_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(<);
 }
 bool QL_Manager::gt_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(>);
 }
 bool QL_Manager::le_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(<=);    
 }
 bool QL_Manager::ge_op(void* attr1, void* attr2, int len1, 
-                                int len2, AttrType type) const{
+                                int len2, AttrType type) {
     QL_operator(>=);
 }
 
@@ -585,8 +593,8 @@ bool QL_Manager::isValidCondition(const Condition &cond,
 bool QL_Manager::evalCondition(void* data, const Condition &cond, 
                     const vector<DataAttrInfo> &attributes) {
     // define pointer to appropriate member function
-    bool (QL_Manager::*comp)(void* attr1, void* attr2, int len1, 
-                                    int len2, AttrType type) const;
+    bool (*comp)(void* attr1, void* attr2, int len1, 
+                                    int len2, AttrType type);
     switch (cond.op) {
         case NE_OP:
             comp = &QL_Manager::ne_op;
@@ -631,7 +639,7 @@ bool QL_Manager::evalCondition(void* data, const Condition &cond,
         len2 = len1;
     }
 
-    return (this->*comp)(attr1, attr2, len1, len2, type);
+    return (*comp)(attr1, attr2, len1, len2, type);
 }
 
 /*  Find attribute info by attribute name 

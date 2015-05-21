@@ -23,6 +23,7 @@
 // QL_Manager: query language (DML)
 //
 class QL_Manager {
+    friend class QL_Condition;
 public:
     QL_Manager (SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm);
     ~QL_Manager();                       // Destructor
@@ -54,24 +55,24 @@ private:
     RM_Manager* rmm;
     IX_Manager* ixm;
     SM_Manager* smm;
-    bool isValidAttr(char* attrName, const std::vector<DataAttrInfo> &attributes);
-    int indexToUse(int nConditions, const Condition conditions[], 
+    static bool isValidAttr(char* attrName, const std::vector<DataAttrInfo> &attributes);
+    static int indexToUse(int nConditions, const Condition conditions[], 
                 const std::vector<DataAttrInfo> &attributes);
-    void buffer(void* ptr, char* buff, int len) const;
-    bool eq_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool ne_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool lt_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool gt_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool ge_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool le_op(void* attr1, void* attr2, int len1, int len2, AttrType type) const;
-    bool evalCondition(void* data, const Condition &cond, 
+    static void buffer(void* ptr, char* buff, int len);
+    static bool eq_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool ne_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool lt_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool gt_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool ge_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool le_op(void* attr1, void* attr2, int len1, int len2, AttrType type);
+    static bool evalCondition(void* data, const Condition &cond, 
                 const std::vector<DataAttrInfo> &attributes);
-    bool isValidCondition(const Condition &cond, 
+    static bool isValidCondition(const Condition &cond, 
                 const std::vector<DataAttrInfo> &attributes);
-    int findAttr(char *attrName, 
+    static int findAttr(char *attrName, 
                 std::vector<DataAttrInfo> &attributes);
-    void printPlanHeader(const char *operation, const char* relname);
-    void printPlanFooter();
+    static void printPlanHeader(const char *operation, const char* relname);
+    static void printPlanFooter();
 };
 
 
@@ -102,6 +103,8 @@ void QL_PrintError(RC rc);
 #define QL_EOF                        405
 #define QL_IXSCAN_WARN                406
 #define QL_UPDATE_WARN                407
+#define QL_COND_WARN                  408
+
 
 
 #define QL_INSERT_ERR                -400
@@ -109,4 +112,6 @@ void QL_PrintError(RC rc);
 #define QL_FILESCAN_ERR              -402
 #define QL_IXSCAN_ERR                -403
 #define QL_UPDATE_ERR                -404
+#define QL_COND_ERR                  -405
+
 #endif
