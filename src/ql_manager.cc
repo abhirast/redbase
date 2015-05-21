@@ -236,6 +236,9 @@ RC QL_Manager::Delete(const char *relName,
     shared_ptr<char> data(new char[attributes.back().offset + attributes.back().attrLength]);
     bool isValid = false;
     QL_ErrorForward(scanner->Open());
+    DataAttrInfo* attrs = &attributes[0];
+    Printer p(attrs, relation.num_attr);
+    p.PrintHeader(cout);
     while (scanner->Next(data, rid) == OK_RC) {
         isValid = true;
         for (int i = 0; i < nConditions; i++) {
@@ -250,8 +253,10 @@ RC QL_Manager::Delete(const char *relName,
                 QL_ErrorForward(ihandles[ind[i]].DeleteEntry(
                     (void*) (data.get() + attributes[ind[i]].offset), rid));
             }
+            p.Print(cout, data.get());
         }
     }
+    p.PrintFooter(cout);
     SM_ErrorForward(scanner->Close());
     // close the relation and index files
     SM_ErrorForward(rmm->CloseFile(relh));
@@ -262,9 +267,11 @@ RC QL_Manager::Delete(const char *relName,
 }
 
 
-//
-// Update from the relName all tuples that satisfy conditions
-//
+/*
+    Update from the relName all tuples that satisfy conditions
+    Use index scan if there is an equlity condition having rhs as
+    value on a non-update attribute. Else use filescan.
+*/
 RC QL_Manager::Update(const char *relName,
                       const RelAttr &updAttr,
                       const int bIsValue,
@@ -284,9 +291,149 @@ RC QL_Manager::Update(const char *relName,
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
     */
-    
+    RC WARN = QL_UPDATE_WARN, ERR = QL_UPDATE_ERR;
+    // validate the inputs
+    if ((strcmp(relName, "relcat") == 0)
+        || (strcmp(relName, "attrcat") == 0)) {
+            return QL_CAT_WARN;
+    }
+    RelationInfo relation;
+    vector<DataAttrInfo> attributes;
+    QL_ErrorForward(smm->getRelation(relName, relation));
+    QL_ErrorForward(smm->getAttributes(relName, attributes));
+    for (int i = 0; i < nConditions; i++) {
+        if (!isValidCondition(conditions[i], attributes)) 
+            return QL_INVALID_WARN;
+    }
+    int upInd = findAttr(updAttr.attrName, attributes);
+    if (upInd < 0) return QL_INVALID_WARN;
+    if (bIsValue) {
+        if (attributes[upInd].attrType != rhsValue.type) return QL_INVALID_WARN;
+    }
+    else {
+        int j = findAttr(rhsRelAttr.attrName, attributes);
+        if (j < 0) return QL_INVALID_WARN;
+        if (attributes[upInd].attrType != attributes[j].attrType) 
+            return QL_INVALID_WARN;
+    }
+    // Now all inputs are valid, set up the appropriate scan
+    RM_FileHandle relh;
+    IX_IndexHandle scan_indh;
+    QL_ErrorForward(rmm->OpenFile(relName, relh));
+    int indexCond = -1;
+    for (int i = 0; i < nConditions; i++) {
+        if (bIsValue) continue;
+        if (strcmp(conditions[i].lhsAttr.attrName, updAttr.attrName) == 0)
+            continue;
+        if (conditions[i].op != EQ_OP) continue;
+        int attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
+        if (attributes[attrInd].indexNo >=0) {
+            indexCond = i;
+            QL_ErrorForward(ixm->OpenIndex(relName, 
+                 attributes[attrInd].indexNo, scan_indh));
+            break;
+        }
+    }
 
+    shared_ptr<QL_Op> scanner;
+    if (indexCond < 0) {
+        // use file scan based on first condition having rhs value
+        DataAttrInfo* dinfo;
+        void *value = 0;
+        CompOp cmp;
+        bool found = false;
+        int attrInd = 0;
+        for (int i = 0; i < nConditions; i++) {
+            if (!conditions[i].bRhsIsAttr) {
+                found = true;
+                attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
+                value = conditions[i].rhsValue.data;
+                cmp = conditions[i].op;
+                break;
+            }
+        }
+        
+        if (!found) cmp = NO_OP;
+        
+        dinfo = &attributes[attrInd];
+        scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
+            dinfo->offset, cmp, value, NO_HINT, attributes));
+    }
+    else {
+        // use index scan
+        CompOp cmp = conditions[indexCond].op;
+        int attrInd = findAttr(conditions[indexCond].lhsAttr.attrName, 
+                                    attributes);
+        scanner.reset(new QL_IndexScan(relh, scan_indh, cmp, 
+            conditions[indexCond].rhsValue.data, NO_HINT, attributes));
+    }
+    // define and open the index handle for updated attribute if exists
+    IX_IndexHandle update_indh;
+    if (attributes[upInd].indexNo >= 0) {
+        QL_ErrorForward(ixm->OpenIndex(relName, 
+                 attributes[upInd].indexNo, update_indh));
+    }
+    // fetch records and check if for records that satisfy all conditions
+    RID rid;
+    shared_ptr<char> data(new char[attributes.back().offset + 
+                            attributes.back().attrLength]);
+    bool isValid = false;
+    QL_ErrorForward(scanner->Open());
+    DataAttrInfo* attrs = &attributes[0];
+    Printer p(attrs, relation.num_attr);
+    p.PrintHeader(cout);
+    while (scanner->Next(data, rid) == OK_RC) {
+        isValid = true;
+        for (int i = 0; i < nConditions; i++) {
+            if (!evalCondition((void*) data.get(), conditions[i], attributes)) {
+                isValid = false;
+                break;
+            }
+        }
+        if (isValid) {
+            // the record satisfies all conditions, update it
+            RM_Record updatedRec;
+            updatedRec.rid = rid;
+            updatedRec.record = new char[attributes.back().offset + 
+                                            attributes.back().attrLength];
+            memcpy(updatedRec.record, data.get(), attributes.back().offset + 
+                                            attributes.back().attrLength);
+            updatedRec.bIsAllocated = 1;
 
+            void *updatePos = (void*) (updatedRec.record + 
+                                    attributes[upInd].offset);
+            // update the contents
+            if (bIsValue) {
+                memcpy(updatePos, rhsValue.data, attributes[upInd].attrLength);
+            }
+            else {
+                int j = findAttr(rhsRelAttr.attrName, attributes);
+                void *sourcePos = (void*) (data.get() + attributes[j].offset);
+                if (attributes[upInd].attrLength < attributes[j].attrLength) {
+                    memcpy(updatePos, sourcePos, attributes[upInd].attrLength);
+                } else {
+                    memset(updatePos, 0, attributes[upInd].attrLength);
+                    memcpy(updatePos, sourcePos, attributes[j].attrLength);
+                }
+            }
+            // update the relation
+            QL_ErrorForward(relh.UpdateRec(updatedRec));
+            // update the index if exists
+            if (attributes[upInd].indexNo >= 0) {
+                QL_ErrorForward(update_indh.DeleteEntry((void*) (data.get() + 
+                    attributes[upInd].offset), rid));
+                QL_ErrorForward(update_indh.InsertEntry(updatePos, rid));
+            }
+            p.Print(cout, updatedRec.record);
+        }
+    }
+    p.PrintFooter(cout);
+    SM_ErrorForward(scanner->Close());
+    // close the relation and index files
+    SM_ErrorForward(rmm->CloseFile(relh));
+    if (attributes[upInd].indexNo >= 0) {
+        SM_ErrorForward(ixm->CloseIndex(update_indh));
+    }
     return OK_RC;
 }
 
@@ -476,5 +623,5 @@ int QL_Manager::findAttr(char* attrName,
             return i;
         }
     }
-    return 0;
+    return -1;
 }
