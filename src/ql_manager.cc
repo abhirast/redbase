@@ -10,12 +10,14 @@
 #include <sys/types.h>
 #include <cassert>
 #include <unistd.h>
+#include <memory>
 #include "redbase.h"
 #include "ql.h"
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
 #include "parser.h"
+#include "ql_internal.h"
 
 using namespace std;
 
@@ -197,6 +199,7 @@ RC QL_Manager::Delete(const char *relName,
     }
     // find if an index scan is needed
     int idxno = indexToUse(nConditions, conditions, attributes);
+    shared_ptr<QL_Op> scanner;
     if (idxno < 0) {
         // use file scan based on first condition having rhs value
         DataAttrInfo* dinfo;
@@ -216,35 +219,35 @@ RC QL_Manager::Delete(const char *relName,
             dinfo = &attributes[0];
             cmp = NO_OP;
         }
-        RM_FileScan fs;
-        QL_ErrorForward(fs.OpenScan(relh, dinfo->attrType, dinfo->attrLength,
-            dinfo->offset, cmp, value, NO_HINT));
-        RM_Record rec;
-        RID rid;
-        char *data;
-        bool isValid = false;
-        while (fs.GetNextRec(rec) == OK_RC) {
-            QL_ErrorForward(rec.GetRid(rid));
-            QL_ErrorForward(rec.GetData(data));
-            isValid = true;
-            for (int i = 0; i < nConditions; i++) {
-                if (!evalCondition((void*) data, conditions[i], attributes)) {
-                    isValid = false;
-                    break;
-                }
-            }
-            if (isValid) {
-                QL_ErrorForward(relh.DeleteRec(rid));
-                for (unsigned int i = 0; i < ind.size(); i++) {
-                    QL_ErrorForward(ihandles[ind[i]].DeleteEntry(
-                        (void*) (data + attributes[i].offset), rid));
-                }
-            }
-        }
+        scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
+            dinfo->offset, cmp, value, NO_HINT, attributes));
     }
     else {
         // use index scan
+        scanner = 0;
     }
+
+    RID rid;
+    shared_ptr<char> data(new char[attributes.back().offset + attributes.back().attrLength]);
+    bool isValid = false;
+    QL_ErrorForward(scanner->Open());
+    while (scanner->Next(data, rid) == OK_RC) {
+        isValid = true;
+        for (int i = 0; i < nConditions; i++) {
+            if (!evalCondition((void*) data.get(), conditions[i], attributes)) {
+                isValid = false;
+                break;
+            }
+        }
+        if (isValid) {
+            QL_ErrorForward(relh.DeleteRec(rid));
+            for (unsigned int i = 0; i < ind.size(); i++) {
+                QL_ErrorForward(ihandles[ind[i]].DeleteEntry(
+                    (void*) (data.get() + attributes[ind[i]].offset), rid));
+            }
+        }
+    }
+    SM_ErrorForward(scanner->Close());
     // close the relation and index files
     SM_ErrorForward(rmm->CloseFile(relh));
     for (size_t i = 0; i < ind.size(); i++) {
