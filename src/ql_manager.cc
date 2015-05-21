@@ -206,25 +206,30 @@ RC QL_Manager::Delete(const char *relName,
         void *value = 0;
         CompOp cmp;
         bool found = false;
+        int attrInd = 0;
         for (int i = 0; i < nConditions; i++) {
             if (!conditions[i].bRhsIsAttr) {
                 found = true;
-                dinfo = findAttr(conditions[i].lhsAttr.attrName, attributes);
+                attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
                 value = conditions[i].rhsValue.data;
                 cmp = conditions[i].op;
                 break;
             }
         }
-        if (!found) {
-            dinfo = &attributes[0];
-            cmp = NO_OP;
-        }
+        
+        if (!found) cmp = NO_OP;
+        
+        dinfo = &attributes[attrInd];
         scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
             dinfo->offset, cmp, value, NO_HINT, attributes));
     }
     else {
         // use index scan
-        scanner = 0;
+        CompOp cmp = conditions[idxno].op;
+        int attrInd = findAttr(conditions[idxno].lhsAttr.attrName, 
+                                    attributes);
+        scanner.reset(new QL_IndexScan(relh, ihandles[attrInd], cmp, 
+            conditions[idxno].rhsValue.data, NO_HINT, attributes));
     }
 
     RID rid;
@@ -265,24 +270,24 @@ RC QL_Manager::Update(const char *relName,
                       const int bIsValue,
                       const RelAttr &rhsRelAttr,
                       const Value &rhsValue,
-                      int nConditions, const Condition conditions[])
-{
+                      int nConditions, const Condition conditions[]) {
+    /*
     int i;
-
     cout << "Update\n";
-
     cout << "   relName = " << relName << "\n";
     cout << "   updAttr:" << updAttr << "\n";
     if (bIsValue)
         cout << "   rhs is value: " << rhsValue << "\n";
     else
         cout << "   rhs is attribute: " << rhsRelAttr << "\n";
-
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
+    */
+    
 
-    return 0;
+
+    return OK_RC;
 }
 
 //
@@ -464,12 +469,12 @@ bool QL_Manager::evalCondition(void* data, const Condition &cond,
 
 /*  Find attribute info by attribute name 
 */
-DataAttrInfo* QL_Manager::findAttr(char* attrName, 
+int QL_Manager::findAttr(char* attrName, 
                     vector<DataAttrInfo> &attributes) {
     for (unsigned int i = 0; i < attributes.size(); i++) {
         if (strcmp(attrName, attributes[i].attrName) == 0) {
-            return &attributes[i];
+            return i;
         }
     }
-    return &attributes[0];
+    return 0;
 }

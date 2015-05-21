@@ -37,9 +37,6 @@ protected:
     QL_Op* rchild;
 };
 
-class QL_IndexScan: public QL_UnaryOp {
-	QL_IndexScan();
-};
 
 class QL_FileScan: public QL_UnaryOp {
 public:
@@ -63,5 +60,25 @@ private:
 	bool isOpen;
 };
 
+
+class QL_IndexScan: public QL_UnaryOp {
+public:
+	QL_IndexScan(RM_FileHandle &fh, IX_IndexHandle &ih, 
+		CompOp cmp, void* value, ClientHint hint, 
+		const std::vector<DataAttrInfo> &attributes);
+	~QL_IndexScan();
+	RC Open();
+	RC Next(std::shared_ptr<char> &rec);
+	RC Next(std::shared_ptr<char> &rec, RID &rid);
+	RC Close();
+private:
+	RM_FileHandle *fh;
+	IX_IndexHandle *ih;
+	IX_IndexScan is;
+	CompOp cmp;
+	void *value;
+	ClientHint hint;
+	bool isOpen;
+};
 
 #endif

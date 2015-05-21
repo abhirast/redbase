@@ -68,7 +68,7 @@ private:
                 const std::vector<DataAttrInfo> &attributes);
     bool isValidCondition(const Condition &cond, 
                 const std::vector<DataAttrInfo> &attributes);
-    DataAttrInfo* findAttr(char *attrName, 
+    int findAttr(char *attrName, 
                 std::vector<DataAttrInfo> &attributes);
 };
 
@@ -98,12 +98,12 @@ void QL_PrintError(RC rc);
 #define QL_DELETE_WARN                403
 #define QL_FILESCAN_WARN              404
 #define QL_EOF                        405
-
+#define QL_IXSCAN_WARN                406
 
 
 
 #define QL_INSERT_ERR                -400
 #define QL_DELETE_ERR                -401
 #define QL_FILESCAN_ERR              -402
-
+#define QL_IXSCAN_ERR                -403
 #endif
