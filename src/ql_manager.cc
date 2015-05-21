@@ -166,8 +166,15 @@ RC QL_Manager::Delete(const char *relName,
         if (!isValidCondition(conditions[i], attributes)) 
             return QL_INVALID_WARN;
     }
+    if (bQueryPlans) {
+        printPlanHeader("DELETE FROM ", relName);
+    }
+    /* Can't do this because need to give feedback to user
     // if there are no conditions, delete the relation and create again
     if (nConditions == 0) {
+        if (bQueryPlans) {
+            cout<<"DELETING AND RECREATING RELATION AND INDEX(ES)"<<endl;
+        }
         AttrInfo *attrs = new AttrInfo[attributes.size()];
         vector<int> indexedAttrs;
         for (unsigned int i = 0 ; i < attributes.size(); i++) {
@@ -185,6 +192,7 @@ RC QL_Manager::Delete(const char *relName,
         delete[] attrs;
         return OK_RC;
     }
+    */
     // open the file and index handles
     RM_FileHandle relh;
     vector<int> ind;
@@ -222,6 +230,9 @@ RC QL_Manager::Delete(const char *relName,
         dinfo = &attributes[attrInd];
         scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
             dinfo->offset, cmp, value, NO_HINT, attributes));
+        if (bQueryPlans) {
+            cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;
+        }
     }
     else {
         // use index scan
@@ -230,8 +241,11 @@ RC QL_Manager::Delete(const char *relName,
                                     attributes);
         scanner.reset(new QL_IndexScan(relh, ihandles[attrInd], cmp, 
             conditions[idxno].rhsValue.data, NO_HINT, attributes));
+        if (bQueryPlans) {
+            cout<<"INDEX SCAN ON "<<attributes[attrInd].attrName<<endl;
+        }
     }
-
+    if (bQueryPlans) printPlanFooter();
     RID rid;
     shared_ptr<char> data(new char[attributes.back().offset + attributes.back().attrLength]);
     bool isValid = false;
@@ -316,6 +330,7 @@ RC QL_Manager::Update(const char *relName,
         if (attributes[upInd].attrType != attributes[j].attrType) 
             return QL_INVALID_WARN;
     }
+    if (bQueryPlans) printPlanHeader("UPDATE ", relName);
     // Now all inputs are valid, set up the appropriate scan
     RM_FileHandle relh;
     IX_IndexHandle scan_indh;
@@ -354,19 +369,24 @@ RC QL_Manager::Update(const char *relName,
         }
         
         if (!found) cmp = NO_OP;
-        
         dinfo = &attributes[attrInd];
         scanner.reset(new QL_FileScan(relh, dinfo->attrType, dinfo->attrLength,
             dinfo->offset, cmp, value, NO_HINT, attributes));
+        if (bQueryPlans) {
+            cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;
+        }
+
     }
     else {
         // use index scan
         CompOp cmp = conditions[indexCond].op;
-        int attrInd = findAttr(conditions[indexCond].lhsAttr.attrName, 
-                                    attributes);
         scanner.reset(new QL_IndexScan(relh, scan_indh, cmp, 
             conditions[indexCond].rhsValue.data, NO_HINT, attributes));
+        if (bQueryPlans) {
+            cout<<"INDEX SCAN ON "<<conditions[indexCond].lhsAttr.attrName<<endl;
+        }
     }
+    if (bQueryPlans) printPlanFooter();
     // define and open the index handle for updated attribute if exists
     IX_IndexHandle update_indh;
     if (attributes[upInd].indexNo >= 0) {
@@ -624,4 +644,17 @@ int QL_Manager::findAttr(char* attrName,
         }
     }
     return -1;
+}
+
+void QL_Manager::printPlanHeader(const char* operation, const char* relname) {
+    cout<<"********************************************\n";
+    cout<<"Query Execution Plan"<<endl;
+    cout<<"-----------------------\n";
+    cout<<"Operation: "<<operation<<" "<<relname<<endl;
+    cout<<"-----------------------\n";
+}
+
+
+void QL_Manager::printPlanFooter() {
+    cout<<"\n********************************************\n\n";
 }

@@ -22,19 +22,19 @@ public:
 
 class QL_UnaryOp : public QL_Op {
 protected:
-    QL_Op* child;
+    std::shared_ptr<QL_Op> child;
 };
 
 
 class QL_BinaryOp : public QL_Op {
 public:
     QL_BinaryOp(QL_Op &left, QL_Op &right) {
-        lchild = &left;
-        rchild = &right;
+        lchild.reset(&left);
+        rchild.reset(&right);
     }
 protected:
-    QL_Op* lchild;
-    QL_Op* rchild;
+    std::shared_ptr<QL_Op> lchild;
+    std::shared_ptr<QL_Op> rchild;
 };
 
 

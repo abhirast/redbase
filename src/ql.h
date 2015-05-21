@@ -70,6 +70,8 @@ private:
                 const std::vector<DataAttrInfo> &attributes);
     int findAttr(char *attrName, 
                 std::vector<DataAttrInfo> &attributes);
+    void printPlanHeader(const char *operation, const char* relname);
+    void printPlanFooter();
 };
 
 
