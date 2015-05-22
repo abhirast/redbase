@@ -12,6 +12,8 @@ enum OpType {
 	IX_LEAF = 2,
 	EQ_COND = 3,
 	NE_COND = 4,
+	PROJ = 5,
+	PERM_DUP = 6,
 	RANGE_COND = 5,
 	REL_CROSS = -1,
 	REL_JOIN = -2
@@ -123,6 +125,45 @@ public:
 private:
 	bool isOpen;
 	const Condition* cond;
+};
+
+
+/////////////////////////////////////////////////////
+// Projection operator
+/////////////////////////////////////////////////////
+
+class QL_Projection: public QL_UnaryOp {
+public:
+	QL_Projection(QL_Op &child, int nSelAttrs, const RelAttr* selAttrs,
+		const std::vector<DataAttrInfo> &attributes);
+	~QL_Projection();
+	RC Open();
+	RC Next(std::vector<char> &rec);
+	RC Reset();
+	RC Close();
+private:
+	bool isOpen;
+	std::vector<DataAttrInfo> inputAttr;
+	std::vector<unsigned int> position;
+};
+
+/////////////////////////////////////////////////////
+// Permute/Duplicate operator
+/////////////////////////////////////////////////////
+
+class QL_PermDup: public QL_UnaryOp {
+public:
+	QL_PermDup(QL_Op &child, int nSelAttrs, const RelAttr* selAttrs,
+		const std::vector<DataAttrInfo> &attributes);
+	~QL_PermDup();
+	RC Open();
+	RC Next(std::vector<char> &rec);
+	RC Reset();
+	RC Close();
+private:
+	bool isOpen;
+	std::vector<DataAttrInfo> inputAttr;
+	std::vector<unsigned int> position;
 };
 
 

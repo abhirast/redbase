@@ -137,6 +137,31 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
             cnode->attributes);
         opTree.push_back(cnode);
     }
+
+    // add the projection
+    if (strcmp(selAttrs[0].attrName, "*") != 0) {
+        QL_Op* proj = new QL_Projection(*(opTree.back()), nSelAttrs, 
+            &selAttrs[0], opTree.back()->attributes);
+        opTree.push_back(proj);
+        
+        // add a permutation / duplication operator if needed
+        int numFound = 0;
+        vector<DataAttrInfo> temp = opTree.back()->attributes;
+        for (unsigned int i = 0; i < temp.size(); i++) {
+            if (strcmp(temp[i].attrName, selAttrs[numFound].attrName) == 0 && 
+                (selAttrs[numFound].relName == 0 ||
+                strcmp(temp[i].relName, selAttrs[numFound].relName) == 0)) {
+                    numFound ++;
+            }
+        }
+        if (numFound < nSelAttrs) {
+            QL_Op *permdup = new QL_PermDup(*(opTree.back()), nSelAttrs, 
+                &selAttrs[0], opTree.back()->attributes);
+            opTree.push_back(permdup);
+        }
+    }
+
+
     // print the result
     QL_Op* root = opTree.back();
     if (bQueryPlans) {
@@ -155,7 +180,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
     delete root;
-    ///////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////
     return OK_RC;
 }
 

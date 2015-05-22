@@ -232,6 +232,7 @@ RC QL_Condition::Open() {
 RC QL_Condition::Next(vector<char> &rec) {
 	RC WARN = QL_EOF, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	do {
 		QL_ErrorForward(child->Next(rec));
 	} while(!QL_Manager::evalCondition((void*) &rec[0], *cond, attributes));
@@ -253,6 +254,165 @@ RC QL_Condition::Close() {
 	return OK_RC;
 }
 
+
+/////////////////////////////////////////////////////
+// Projection operator
+/////////////////////////////////////////////////////
+
+QL_Projection::QL_Projection(QL_Op &child, int nSelAttrs, 
+	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
+	this->inputAttr = attributes;
+	this->child = &child;
+	isOpen = false;
+	// construct the output schema, loop through input attrs to see which
+	// of them are present in the selAttrs
+	for (unsigned int i = 0; i < attributes.size(); i++) {
+		for (int j = 0; j < nSelAttrs; j++) {
+			if (strcmp(attributes[i].attrName, selAttrs[j].attrName) == 0 &&
+			 (selAttrs[j].relName == 0 ||
+			  strcmp(attributes[i].relName, selAttrs[j].relName) == 0)) {
+				this->attributes.push_back(attributes[i]);
+				this->position.push_back(i);
+				break;
+			}
+		}
+	}
+	// modify the offsets of the output schema
+	int cum = 0;
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].offset = cum;
+		cum += this->attributes[i].attrLength;
+	}
+	opType = PROJ;
+	desc << "PROJECT ";
+	if (this->attributes[0].relName != 0) {
+		desc << this->attributes[0].relName << ".";
+	}
+	desc << (this->attributes[0].attrName);
+	for (unsigned int i = 1; i < this->attributes.size(); i++) {
+		desc << ", ";
+		desc << this->attributes[i].relName << ".";
+		desc << this->attributes[i].attrName;
+	}
+}
+
+QL_Projection::~QL_Projection() {
+	if (child != 0) delete child;
+}
+
+RC QL_Projection::Open() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (isOpen) return WARN;
+	QL_ErrorForward(child->Open());
+	isOpen = true;
+	return OK_RC;
+}
+
+RC QL_Projection::Next(vector<char> &rec) {
+	RC WARN = QL_EOF, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
+	vector<char> temp(inputAttr.back().offset + inputAttr.back().attrLength);
+	QL_ErrorForward(child->Next(temp));
+	int st = 0, sz = 0, curr = 0;
+	for (unsigned int i = 0; i < attributes.size(); i++) {
+		st = inputAttr[this->position[i]].offset;
+		sz = inputAttr[this->position[i]].attrLength;
+		memcpy(&rec[curr], &temp[st], sz);
+		curr += sz;
+	}
+	return OK_RC;
+}
+
+RC QL_Projection::Reset() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(child->Reset());
+	return OK_RC;
+}
+
+RC QL_Projection::Close() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(child->Close());
+	isOpen = false;
+	return OK_RC;
+}
+
+/////////////////////////////////////////////////////
+// Permute/Duplicate operator
+/////////////////////////////////////////////////////
+
+QL_PermDup::QL_PermDup(QL_Op &child, int nSelAttrs, 
+	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
+	this->inputAttr = attributes;
+	this->child = &child;
+	isOpen = false;
+	// construct the output schema, loop through input attrs to see which
+	// of them are present in the selAttrs
+	for (int i = 0; i < nSelAttrs; i++) {
+		for (unsigned int j = 0; j < attributes.size(); j++) {
+			if (strcmp(attributes[j].attrName, selAttrs[i].attrName) == 0 &&
+			 (selAttrs[i].relName == 0 ||
+			  strcmp(attributes[j].relName, selAttrs[i].relName) == 0)) {
+				this->attributes.push_back(attributes[j]);
+				this->position.push_back(j);
+				break;
+			}
+		}
+	}
+	// modify the offsets of the output schema
+	int cum = 0;
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].offset = cum;
+		cum += this->attributes[i].attrLength;
+	}
+	opType = PERM_DUP;
+	desc << "PERMUTE/DUPLICTE ATTRIBUTES";
+}
+
+QL_PermDup::~QL_PermDup() {
+	if (child != 0) delete child;
+}
+
+RC QL_PermDup::Open() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (isOpen) return WARN;
+	QL_ErrorForward(child->Open());
+	isOpen = true;
+	return OK_RC;
+}
+
+RC QL_PermDup::Next(vector<char> &rec) {
+	RC WARN = QL_EOF, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
+	vector<char> temp(inputAttr.back().offset + inputAttr.back().attrLength);
+	QL_ErrorForward(child->Next(temp));
+	int st = 0, sz = 0, curr = 0;
+	for (unsigned int i = 0; i < attributes.size(); i++) {
+		st = inputAttr[this->position[i]].offset;
+		sz = inputAttr[this->position[i]].attrLength;
+		memcpy(&rec[curr], &temp[st], sz);
+		curr += sz;
+	}
+	return OK_RC;
+}
+
+RC QL_PermDup::Reset() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(child->Reset());
+	return OK_RC;
+}
+
+RC QL_PermDup::Close() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(child->Close());
+	isOpen = false;
+	return OK_RC;
+}
 
 /////////////////////////////////////////////////////
 // Cross product operator
