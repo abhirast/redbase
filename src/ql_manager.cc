@@ -270,8 +270,7 @@ RC QL_Manager::Delete(const char *relName,
     }
     if (bQueryPlans) printPlanFooter();
     RID rid;
-    vector<char> data(attributes.back().offset + 
-        attributes.back().attrLength);
+    vector<char> data;
     bool isValid = false;
     QL_ErrorForward(scanner->Open());
     DataAttrInfo* attrs = &attributes[0];
@@ -418,8 +417,7 @@ RC QL_Manager::Update(const char *relName,
     }
     // fetch records and check if for records that satisfy all conditions
     RID rid;
-    vector<char> data(attributes.back().offset + 
-                            attributes.back().attrLength);
+    vector<char> data;
     bool isValid = false;
     QL_ErrorForward(scanner->Open());
     DataAttrInfo* attrs = &attributes[0];

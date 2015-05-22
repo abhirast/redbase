@@ -31,6 +31,7 @@ QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex,
 	this->attributes = attributes;
 	isOpen = false;
 	child = 0;
+	opType = RM_LEAF;
 }
 
 QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName,
@@ -68,7 +69,8 @@ RC QL_FileScan::Next(vector<char> &rec) {
 	char *temp;
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
-	memcpy(&rec[0], temp, attributes.back().offset + attributes.back().attrLength);
+	memcpy(&rec[0], temp, attributes.back().offset + 
+							attributes.back().attrLength);
 	return OK_RC;
 }
 
@@ -77,11 +79,21 @@ RC QL_FileScan::Next(vector<char> &rec, RID &rid) {
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
+	rec.resize(attributes.back().offset + attributes.back().attrLength);
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
 	QL_ErrorForward(record.GetRid(rid));
 	memcpy(&rec[0], temp, attributes.back().offset + 
 		attributes.back().attrLength);
+	return OK_RC;
+}
+
+RC QL_FileScan::Reset() {
+	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(fs.CloseScan());
+	QL_ErrorForward(fs.OpenScan(fh, type, len,
+            offset, cmp, value, hint));
 	return OK_RC;
 }
 
@@ -111,6 +123,7 @@ QL_IndexScan::QL_IndexScan(RM_Manager *rmm, IX_Manager *ixm,
 	this->indexNo = attributes[attrIndex].indexNo;
 	isOpen = false;
 	child = 0;
+	opType = IX_LEAF;
 }
 
 QL_IndexScan::~QL_IndexScan() {
@@ -145,11 +158,20 @@ RC QL_IndexScan::Next(vector<char> &rec, RID &rid) {
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
+	rec.resize(attributes.back().offset + attributes.back().attrLength);
 	QL_ErrorForward(is.GetNextEntry(rid));
 	QL_ErrorForward(fh.GetRec(rid, record));
 	QL_ErrorForward(record.GetData(temp));
 	memcpy(&rec[0], temp, attributes.back().offset + 
 		attributes.back().attrLength);
+	return OK_RC;
+}
+
+RC QL_IndexScan::Reset() {
+	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(is.CloseScan());
+	QL_ErrorForward(is.OpenScan(ih, cmp, value, hint));
 	return OK_RC;
 }
 
@@ -172,6 +194,13 @@ QL_Condition::QL_Condition(QL_Op &child, Condition cond,
 	this->attributes = attributes;
 	this->child.reset(&child);
 	isOpen = false;
+	if (cond.op == EQ_OP) {
+		opType = EQ_COND;
+	} else if (cond.op == NE_OP){
+		opType = NE_COND;
+	} else {
+		opType = RANGE_COND;
+	}
 }
 
 QL_Condition::~QL_Condition() {
@@ -190,15 +219,22 @@ RC QL_Condition::Next(vector<char> &rec) {
 	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
 	do {
-		QL_ErrorForward((child.get())->Next(rec));
+		QL_ErrorForward(child->Next(rec));
 	} while(!QL_Manager::evalCondition((void*) &rec[0], cond, attributes));
+	return OK_RC;
+}
+
+RC QL_Condition::Reset() {
+	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(child->Reset());
 	return OK_RC;
 }
 
 RC QL_Condition::Close() {
 	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
-	QL_ErrorForward((child.get())->Close());
+	QL_ErrorForward(child->Reset());
 	isOpen = false;
 	return OK_RC;
 }
@@ -211,21 +247,68 @@ QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
 	this->lchild.reset(&left);
 	this->rchild.reset(&right);
 	isOpen = false;
+	leftValid = false;
+	attributes = lchild->attributes;
+	auto temp = rchild->attributes;
+	// change offset of rchild attributes
+	leftRecSize = attributes.back().offset + attributes.back().attrLength;
+	for (unsigned int i = 0; i < temp.size(); i++) {
+		temp[i].offset += leftRecSize;
+	}
+	attributes.insert(attributes.end(), temp.begin(), temp.end());
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < attributes.size(); i++) {
+		attributes[i].indexNo = -1;
+	}
+	opType = REL_CROSS;
 }
 
 QL_Cross::~QL_Cross() {}
 
 RC QL_Cross::Open() {
+	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
+	if (isOpen) return WARN;
+	QL_ErrorForward(lchild->Open());
+	QL_ErrorForward(rchild->Open());
+	isOpen = true;
+	leftValid = false;
+	return WARN;
+}
+
+RC QL_Cross::Next(vector<char> &rec) {
+	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
+	if (!leftValid) {
+		QL_ErrorForward(lchild->Next(leftrec));
+		leftValid = true;
+	}
+	RC rc = rchild->Next(rightrec);
+	if (rc == QL_EOF) {
+		QL_ErrorForward(rchild->Reset());
+		QL_ErrorForward(rchild->Next(rightrec));
+		QL_ErrorForward(lchild->Next(leftrec));
+	} else if (rc != OK_RC) {
+		return rc;
+	}
+	rec.resize(leftrec.size() + rightrec.size());
+	memcpy(&rec[0], &leftrec[0], leftrec.size());
+	memcpy(&rec[leftrec.size()], &rightrec[0], rightrec.size());
 	return OK_RC;
 }
 
-RC QL_Cross::Next(std::vector<char> &rec) {
+RC QL_Cross::Reset() {
+	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(lchild->Reset());
+	QL_ErrorForward(rchild->Reset());
+	leftValid = false;
 	return OK_RC;
 }
 
 RC QL_Cross::Close() {
+	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
+	if (!isOpen) return WARN;
+	QL_ErrorForward(lchild->Close());
+	QL_ErrorForward(rchild->Close());
 	return OK_RC;
 }
-
-
 

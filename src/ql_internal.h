@@ -7,6 +7,18 @@
 #ifndef QL_INT_H
 #define QL_INT_H
 
+enum OpType {
+	RM_LEAF,
+	IX_LEAF,
+	EQ_COND,
+	NE_COND,
+	RANGE_COND,
+	REL_CROSS,
+	REL_JOIN
+};
+
+
+
 /////////////////////////////////////////////////////
 // Base Operator Classes
 /////////////////////////////////////////////////////
@@ -19,6 +31,8 @@ public:
     // only the table scans implement this
     virtual RC Next(std::vector<char> &rec, RID &rid) {return QL_EOF;}
     virtual RC Close() = 0; 
+    virtual RC Reset() = 0;
+    OpType opType;
 };
 
 
@@ -50,6 +64,7 @@ public:
 	RC Open();
 	RC Next(std::vector<char> &rec);
 	RC Next(std::vector<char> &rec, RID &rid);
+	RC Reset();
 	RC Close();
 private:
 	std::string relName;
@@ -75,6 +90,7 @@ public:
 	RC Open();
 	RC Next(std::vector<char> &rec);
 	RC Next(std::vector<char> &rec, RID &rid);
+	RC Reset();
 	RC Close();
 private:
 	std::string relName;
@@ -101,6 +117,7 @@ public:
 	~QL_Condition();
 	RC Open();
 	RC Next(std::vector<char> &rec);
+	RC Reset();
 	RC Close();
 private:
 	bool isOpen;
@@ -117,9 +134,14 @@ public:
 	~QL_Cross();
 	RC Open();
 	RC Next(std::vector<char> &rec);
+	RC Reset();
 	RC Close();
 private:
 	bool isOpen;
+	std::vector<char> leftrec;
+	std::vector<char> rightrec;	// for preventing repeated heap allocs
+	bool leftValid;
+	int leftRecSize;
 };
 
 #endif

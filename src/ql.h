@@ -105,6 +105,7 @@ void QL_PrintError(RC rc);
 #define QL_UPDATE_WARN                407
 #define QL_COND_WARN                  408
 #define QL_SELECT_WARN                409
+#define QL_CROSS_WARN                 410
 
 
 
@@ -115,5 +116,6 @@ void QL_PrintError(RC rc);
 #define QL_UPDATE_ERR                -404
 #define QL_COND_ERR                  -405
 #define QL_SELECT_ERR                -406
+#define QL_CROSS_ERR                 -407
 
 #endif
