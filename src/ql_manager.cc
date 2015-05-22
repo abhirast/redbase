@@ -84,6 +84,38 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     for (int i = 0; i < nConditions; i++) {
         return WARN; //@TODO
     }
+    // define a filescan op for each relation
+    vector<shared_ptr<QL_Op>> opTree;
+    for (int i = 0; i < nRelations; i++) {
+        shared_ptr<QL_Op> node;
+        node.reset(new QL_FileScan(rmm, relations[i], attributes[i]));
+        opTree.push_back(node);
+    }
+    // do the cross product of relations
+    shared_ptr<QL_Op> xnode;
+    if (nRelations > 1) {
+        xnode.reset(new QL_Cross(*opTree[0], *opTree[1]));
+        opTree.push_back(xnode);
+    }
+    for (int i = 2; i < nRelations; i++) {
+        xnode.reset(new QL_Cross(*xnode, *opTree[i]));
+        opTree.push_back(xnode);  
+    }
+    shared_ptr<QL_Op> root = opTree.back();
+    for (unsigned int i = 0; i < opTree.size(); i++) {
+        cout<<opTree[i]->opType<<endl;
+    }
+    // print the result
+    vector<char> data;
+    QL_ErrorForward(root->Open());
+    DataAttrInfo* attrs = &(root->attributes[0]);
+    Printer p(attrs, root->attributes.size());
+    p.PrintHeader(cout);
+    while (root->Next(data) == OK_RC) {
+        p.Print(cout, &data[0]);
+    }
+    p.PrintFooter(cout);
+    SM_ErrorForward(root->Close());
     return OK_RC;
 }
 
