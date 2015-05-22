@@ -680,6 +680,36 @@ bool QL_Manager::isValidCondition(const Condition &cond,
     if (!cond.bRhsIsAttr) {
         rhs = cond.rhsValue.type;
     }
+    // type coersion
+    if (lhs != rhs && !cond.bRhsIsAttr) {
+        Condition c = cond;
+        if (lhs == INT) {
+            c.rhsValue.type = lhs;
+            int x;
+            if (rhs == FLOAT) {
+               x = (int) *((float*) c.rhsValue.data);
+            } else if (rhs == STRING) {
+               x = atoi((char*) c.rhsValue.data);
+            }
+            memcpy(c.rhsValue.data, &x, 4);
+            rhs = lhs;
+            // const cast
+            memcpy(const_cast<Condition*>(&cond), &c, sizeof(Condition));
+        }
+        else if (lhs == FLOAT) {
+            c.rhsValue.type = lhs;
+            float x;
+            if (rhs == INT) {
+                x = (float) *((int*) c.rhsValue.data);
+            } else if (rhs == STRING) {
+                x = atof((char*) c.rhsValue.data);
+            }
+            memcpy(c.rhsValue.data, &x, 4);
+            rhs = lhs;
+            // const cast
+            memcpy(const_cast<Condition*>(&cond), &c, sizeof(Condition));
+        }
+    }
     return (lhs == rhs && foundl && foundr);
 }
 
