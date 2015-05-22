@@ -15,9 +15,9 @@ public:
 	virtual ~QL_Op() {};
     std::vector<DataAttrInfo> attributes;
     virtual RC Open() = 0;
-    virtual RC Next(std::shared_ptr<char> &rec) = 0;
+    virtual RC Next(std::vector<char> &rec) = 0;
     // only the table scans implement this
-    virtual RC Next(std::shared_ptr<char> &rec, RID &rid) {return QL_EOF;}
+    virtual RC Next(std::vector<char> &rec, RID &rid) {return QL_EOF;}
     virtual RC Close() = 0; 
 };
 
@@ -31,10 +31,6 @@ public:
 
 class QL_BinaryOp : public QL_Op {
 public:
-    QL_BinaryOp(QL_Op &left, QL_Op &right) {
-        lchild.reset(&left);
-        rchild.reset(&right);
-    }
     std::shared_ptr<QL_Op> lchild;
     std::shared_ptr<QL_Op> rchild;
 };
@@ -52,8 +48,8 @@ public:
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_FileScan();
 	RC Open();
-	RC Next(std::shared_ptr<char> &rec);
-	RC Next(std::shared_ptr<char> &rec, RID &rid);
+	RC Next(std::vector<char> &rec);
+	RC Next(std::vector<char> &rec, RID &rid);
 	RC Close();
 private:
 	std::string relName;
@@ -77,8 +73,8 @@ public:
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_IndexScan();
 	RC Open();
-	RC Next(std::shared_ptr<char> &rec);
-	RC Next(std::shared_ptr<char> &rec, RID &rid);
+	RC Next(std::vector<char> &rec);
+	RC Next(std::vector<char> &rec, RID &rid);
 	RC Close();
 private:
 	std::string relName;
@@ -104,12 +100,26 @@ public:
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_Condition();
 	RC Open();
-	RC Next(std::shared_ptr<char> &rec);
+	RC Next(std::vector<char> &rec);
 	RC Close();
 private:
 	bool isOpen;
 	Condition cond;
 };
 
+/////////////////////////////////////////////////////
+// Cross product operator
+/////////////////////////////////////////////////////
+
+class QL_Cross: public QL_BinaryOp {
+public:
+	QL_Cross(QL_Op &left, QL_Op &right);
+	~QL_Cross();
+	RC Open();
+	RC Next(std::vector<char> &rec);
+	RC Close();
+private:
+	bool isOpen;
+};
 
 #endif

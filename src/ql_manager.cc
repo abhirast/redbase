@@ -48,7 +48,7 @@ QL_Manager::~QL_Manager() {
 RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nRelations, const char * const relations[],
                       int nConditions, const Condition conditions[]) {
-    
+    /*
     int i;
     cout << "Select\n";
     cout << "   nSelAttrs = " << nSelAttrs << "\n";
@@ -60,18 +60,30 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     cout << "   nCondtions = " << nConditions << "\n";
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-    
+    */
+    RC WARN = QL_SELECT_WARN, ERR = QL_SELECT_ERR;
     // Validate the inputs
-    // check if selAttrs are valid and distinct
-    if (strcmp(selAttrs[0].attrName, "*") != 0) {
-        for (int i = 0; i < nSelAttrs; i++) {
-
+    // check if relations are valid and distinct
+    vector<vector<DataAttrInfo>> attributes(nRelations);
+    for (int i = 0; i < nRelations; i++) {
+        QL_ErrorForward(smm->getAttributes(relations[i], attributes[i]));
+        for (int j = 0; j < i; j++) {
+            if (strcmp(relations[i],relations[j]) == 0) return WARN;
         }
     }
-    // check if relations are valid and distinct
+    // check if selAttrs are valid, make a copy and fill the missing
+    // relNames
+    if (strcmp(selAttrs[0].attrName, "*") != 0) {
+        return WARN; // @TODO
+        for (int i = 0; i < nSelAttrs; i++) {
+            
+        }
+    }
+
     // check if conditions are valid and involve from clause relations
-
-
+    for (int i = 0; i < nConditions; i++) {
+        return WARN; //@TODO
+    }
     return OK_RC;
 }
 
@@ -258,7 +270,8 @@ RC QL_Manager::Delete(const char *relName,
     }
     if (bQueryPlans) printPlanFooter();
     RID rid;
-    shared_ptr<char> data(new char[attributes.back().offset + attributes.back().attrLength]);
+    vector<char> data(attributes.back().offset + 
+        attributes.back().attrLength);
     bool isValid = false;
     QL_ErrorForward(scanner->Open());
     DataAttrInfo* attrs = &attributes[0];
@@ -267,7 +280,7 @@ RC QL_Manager::Delete(const char *relName,
     while (scanner->Next(data, rid) == OK_RC) {
         isValid = true;
         for (int i = 0; i < nConditions; i++) {
-            if (!evalCondition((void*) data.get(), conditions[i], attributes)) {
+            if (!evalCondition((void*) &data[0], conditions[i], attributes)) {
                 isValid = false;
                 break;
             }
@@ -276,9 +289,9 @@ RC QL_Manager::Delete(const char *relName,
             QL_ErrorForward(relh.DeleteRec(rid));
             for (unsigned int i = 0; i < ind.size(); i++) {
                 QL_ErrorForward(ihandles[ind[i]].DeleteEntry(
-                    (void*) (data.get() + attributes[ind[i]].offset), rid));
+                    (void*) &data[attributes[ind[i]].offset], rid));
             }
-            p.Print(cout, data.get());
+            p.Print(cout, &data[0]);
         }
     }
     p.PrintFooter(cout);
@@ -333,7 +346,8 @@ RC QL_Manager::Update(const char *relName,
     int upInd = findAttr(updAttr.attrName, attributes);
     if (upInd < 0) return QL_INVALID_WARN;
     if (bIsValue) {
-        if (attributes[upInd].attrType != rhsValue.type) return QL_INVALID_WARN;
+        if (attributes[upInd].attrType != rhsValue.type) 
+            return QL_INVALID_WARN;
     }
     else {
         int j = findAttr(rhsRelAttr.attrName, attributes);
@@ -389,7 +403,8 @@ RC QL_Manager::Update(const char *relName,
         scanner.reset(new QL_IndexScan(rmm, ixm, relName, attrIndex, cmp, 
             conditions[indexCond].rhsValue.data, NO_HINT, attributes));
         if (bQueryPlans) {
-            cout<<"INDEX SCAN ON "<<conditions[indexCond].lhsAttr.attrName<<endl;
+            cout<<"INDEX SCAN ON "<<
+                conditions[indexCond].lhsAttr.attrName<<endl;
         }
     }
     if (bQueryPlans) printPlanFooter();
@@ -403,8 +418,8 @@ RC QL_Manager::Update(const char *relName,
     }
     // fetch records and check if for records that satisfy all conditions
     RID rid;
-    shared_ptr<char> data(new char[attributes.back().offset + 
-                            attributes.back().attrLength]);
+    vector<char> data(attributes.back().offset + 
+                            attributes.back().attrLength);
     bool isValid = false;
     QL_ErrorForward(scanner->Open());
     DataAttrInfo* attrs = &attributes[0];
@@ -413,7 +428,7 @@ RC QL_Manager::Update(const char *relName,
     while (scanner->Next(data, rid) == OK_RC) {
         isValid = true;
         for (int i = 0; i < nConditions; i++) {
-            if (!evalCondition((void*) data.get(), conditions[i], attributes)) {
+            if (!evalCondition((void*) &data[0], conditions[i], attributes)) {
                 isValid = false;
                 break;
             }
@@ -424,7 +439,7 @@ RC QL_Manager::Update(const char *relName,
             updatedRec.rid = rid;
             updatedRec.record = new char[attributes.back().offset + 
                                             attributes.back().attrLength];
-            memcpy(updatedRec.record, data.get(), attributes.back().offset + 
+            memcpy(updatedRec.record, &data[0], attributes.back().offset + 
                                             attributes.back().attrLength);
             updatedRec.bIsAllocated = 1;
 
@@ -436,7 +451,7 @@ RC QL_Manager::Update(const char *relName,
             }
             else {
                 int j = findAttr(rhsRelAttr.attrName, attributes);
-                void *sourcePos = (void*) (data.get() + attributes[j].offset);
+                void *sourcePos = (void*) &data[attributes[j].offset];
                 if (attributes[upInd].attrLength < attributes[j].attrLength) {
                     memcpy(updatePos, sourcePos, attributes[upInd].attrLength);
                 } else {
@@ -448,8 +463,8 @@ RC QL_Manager::Update(const char *relName,
             QL_ErrorForward(relh.UpdateRec(updatedRec));
             // update the index if exists
             if (attributes[upInd].indexNo >= 0) {
-                QL_ErrorForward(update_indh.DeleteEntry((void*) (data.get() + 
-                    attributes[upInd].offset), rid));
+                QL_ErrorForward(update_indh.DeleteEntry((void*) 
+                                    &data[attributes[upInd].offset], rid));
                 QL_ErrorForward(update_indh.InsertEntry(updatePos, rid));
             }
             p.Print(cout, updatedRec.record);

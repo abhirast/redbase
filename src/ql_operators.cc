@@ -61,18 +61,18 @@ RC QL_FileScan::Open() {
 	return OK_RC;
 }
 
-RC QL_FileScan::Next(shared_ptr<char> &rec) {
+RC QL_FileScan::Next(vector<char> &rec) {
 	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
-	memcpy(rec.get(), temp, attributes.back().offset + attributes.back().attrLength);
+	memcpy(&rec[0], temp, attributes.back().offset + attributes.back().attrLength);
 	return OK_RC;
 }
 
-RC QL_FileScan::Next(shared_ptr<char> &rec, RID &rid) {
+RC QL_FileScan::Next(vector<char> &rec, RID &rid) {
 	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
@@ -80,7 +80,7 @@ RC QL_FileScan::Next(shared_ptr<char> &rec, RID &rid) {
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
 	QL_ErrorForward(record.GetRid(rid));
-	memcpy(rec.get(), temp, attributes.back().offset + 
+	memcpy(&rec[0], temp, attributes.back().offset + 
 		attributes.back().attrLength);
 	return OK_RC;
 }
@@ -126,7 +126,7 @@ RC QL_IndexScan::Open() {
 	return OK_RC;
 }
 
-RC QL_IndexScan::Next(shared_ptr<char> &rec) {
+RC QL_IndexScan::Next(vector<char> &rec) {
 	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
 	RID rid;
@@ -135,12 +135,12 @@ RC QL_IndexScan::Next(shared_ptr<char> &rec) {
 	QL_ErrorForward(is.GetNextEntry(rid));
 	QL_ErrorForward(fh.GetRec(rid, record));
 	QL_ErrorForward(record.GetData(temp));
-	memcpy(rec.get(), temp, attributes.back().offset + 
+	memcpy(&rec[0], temp, attributes.back().offset + 
 		attributes.back().attrLength);
 	return OK_RC;
 }
 
-RC QL_IndexScan::Next(shared_ptr<char> &rec, RID &rid) {
+RC QL_IndexScan::Next(vector<char> &rec, RID &rid) {
 	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
@@ -148,7 +148,7 @@ RC QL_IndexScan::Next(shared_ptr<char> &rec, RID &rid) {
 	QL_ErrorForward(is.GetNextEntry(rid));
 	QL_ErrorForward(fh.GetRec(rid, record));
 	QL_ErrorForward(record.GetData(temp));
-	memcpy(rec.get(), temp, attributes.back().offset + 
+	memcpy(&rec[0], temp, attributes.back().offset + 
 		attributes.back().attrLength);
 	return OK_RC;
 }
@@ -186,12 +186,12 @@ RC QL_Condition::Open() {
 	return OK_RC;
 }
 
-RC QL_Condition::Next(shared_ptr<char> &rec) {
+RC QL_Condition::Next(vector<char> &rec) {
 	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
 	do {
 		QL_ErrorForward((child.get())->Next(rec));
-	} while(!QL_Manager::evalCondition((void*) rec.get(), cond, attributes));
+	} while(!QL_Manager::evalCondition((void*) &rec[0], cond, attributes));
 	return OK_RC;
 }
 
@@ -202,3 +202,30 @@ RC QL_Condition::Close() {
 	isOpen = false;
 	return OK_RC;
 }
+
+/////////////////////////////////////////////////////
+// Cross product operator
+/////////////////////////////////////////////////////
+
+QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
+	this->lchild.reset(&left);
+	this->rchild.reset(&right);
+	isOpen = false;
+}
+
+QL_Cross::~QL_Cross() {}
+
+RC QL_Cross::Open() {
+	return OK_RC;
+}
+
+RC QL_Cross::Next(std::vector<char> &rec) {
+	return OK_RC;
+}
+
+RC QL_Cross::Close() {
+	return OK_RC;
+}
+
+
+
