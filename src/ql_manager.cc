@@ -154,9 +154,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     }
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
-    for (unsigned int i = 0; i < opTree.size(); i++) {
-        delete opTree[i];
-    }
+    delete root;
     ///////////////////////////////////////////////////////////////
     return OK_RC;
 }

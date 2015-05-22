@@ -25,13 +25,13 @@ enum OpType {
 class QL_Op {
 public:
 	virtual ~QL_Op() {};
-    std::vector<DataAttrInfo> attributes;
     virtual RC Open() = 0;
     virtual RC Next(std::vector<char> &rec) = 0;
     // only the table scans implement this
     virtual RC Next(std::vector<char> &rec, RID &rid) {return QL_EOF;}
     virtual RC Close() = 0; 
     virtual RC Reset() = 0;
+    std::vector<DataAttrInfo> attributes;
     OpType opType;
     std::stringstream desc;
 };
@@ -124,6 +124,7 @@ private:
 	bool isOpen;
 	const Condition* cond;
 };
+
 
 /////////////////////////////////////////////////////
 // Cross product operator

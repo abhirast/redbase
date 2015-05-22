@@ -218,7 +218,7 @@ QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 }
 
 QL_Condition::~QL_Condition() {
-
+	if (child != 0) delete child;
 }
 
 RC QL_Condition::Open() {
@@ -253,6 +253,7 @@ RC QL_Condition::Close() {
 	return OK_RC;
 }
 
+
 /////////////////////////////////////////////////////
 // Cross product operator
 /////////////////////////////////////////////////////
@@ -278,7 +279,10 @@ QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
 	desc << "CROSS PROD";
 }
 
-QL_Cross::~QL_Cross() {}
+QL_Cross::~QL_Cross() {
+	if (lchild != 0) delete lchild;
+	if (rchild != 0) delete rchild;
+}
 
 RC QL_Cross::Open() {
 	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
