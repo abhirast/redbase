@@ -11,6 +11,7 @@
 #include <cassert>
 #include <unistd.h>
 #include <memory>
+#include <sstream>
 #include "redbase.h"
 #include "ql.h"
 #include "sm.h"
@@ -48,74 +49,115 @@ QL_Manager::~QL_Manager() {
 RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nRelations, const char * const relations[],
                       int nConditions, const Condition conditions[]) {
-    /*
-    int i;
-    cout << "Select\n";
-    cout << "   nSelAttrs = " << nSelAttrs << "\n";
-    for (i = 0; i < nSelAttrs; i++)
-        cout << "   selAttrs[" << i << "]:" << selAttrs[i] << "\n";
-    cout << "   nRelations = " << nRelations << "\n";
-    for (i = 0; i < nRelations; i++)
-        cout << "   relations[" << i << "] " << relations[i] << "\n";
-    cout << "   nCondtions = " << nConditions << "\n";
-    for (i = 0; i < nConditions; i++)
-        cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-    */
     RC WARN = QL_SELECT_WARN, ERR = QL_SELECT_ERR;
     // Validate the inputs
     // check if relations are valid and distinct
     vector<vector<DataAttrInfo>> attributes(nRelations);
+    vector<DataAttrInfo> allAttributes;
     for (int i = 0; i < nRelations; i++) {
         QL_ErrorForward(smm->getAttributes(relations[i], attributes[i]));
         for (int j = 0; j < i; j++) {
-            if (strcmp(relations[i],relations[j]) == 0) return WARN;
+            if (strcmp(relations[i],relations[j]) == 0) return QL_INVALID_WARN;
         }
+        allAttributes.insert(allAttributes.end(), attributes[i].begin(), 
+            attributes[i].end());
     }
-    // check if selAttrs are valid, make a copy and fill the missing
+    // check if selAttrs are valid
     // relNames
     if (strcmp(selAttrs[0].attrName, "*") != 0) {
-        return WARN; // @TODO
         for (int i = 0; i < nSelAttrs; i++) {
-            
+            if (findAttr(selAttrs[i].relName, selAttrs[i].attrName, 
+                allAttributes) < 0) return QL_INVALID_WARN;
         }
     }
-
-    // check if conditions are valid and involve from clause relations
+    // check if conditions are valid and involve 'from' clause relations
     for (int i = 0; i < nConditions; i++) {
-        return WARN; //@TODO
+        if (!isValidCondition(conditions[i], allAttributes))
+            return QL_INVALID_WARN;
     }
+    // collect ambiguous attributes, an attribute is ambiguous if
+    // it appears in two relations in the 'from' clause 
+    vector<char*> ambiguous;
+    for (unsigned int i = 0; i < allAttributes.size(); i++) {
+        for (unsigned int j = 0; j < i; j++) {
+            if (strcmp(allAttributes[i].attrName, 
+                allAttributes[j].attrName) == 0)
+                    ambiguous.push_back(allAttributes[i].attrName);
+        }
+    }
+    // check if select and where clause have any ambiguous attributes
+    // without a relName
+    for (int i = 0; i < nSelAttrs; i++) {
+        if (selAttrs[i].relName == 0) {
+            for (unsigned int j = 0; j < ambiguous.size(); j++) {
+                if (strcmp(selAttrs[i].attrName, ambiguous[j]) == 0)
+                    return QL_INVALID_WARN;
+            }
+        }
+    }
+    for (int i = 0; i < nConditions; i++) {
+        if (conditions[i].lhsAttr.relName == 0) {
+            for (unsigned int j = 0; j < ambiguous.size(); j++) {
+                if (strcmp(conditions[i].lhsAttr.attrName, ambiguous[j]) == 0)
+                    return QL_INVALID_WARN;
+            }
+        }
+        if (conditions[i].bRhsIsAttr && conditions[i].rhsAttr.relName == 0) {
+            for (unsigned int j = 0; j < ambiguous.size(); j++) {
+                if (strcmp(conditions[i].rhsAttr.attrName, ambiguous[j]) == 0)
+                    return QL_INVALID_WARN;
+            }
+        }
+    }
+    /************************************
+    Define the operator tree
+    *************************************/
     // define a filescan op for each relation
-    vector<shared_ptr<QL_Op>> opTree;
+    vector<QL_Op*> opTree;
     for (int i = 0; i < nRelations; i++) {
-        shared_ptr<QL_Op> node;
-        node.reset(new QL_FileScan(rmm, relations[i], attributes[i]));
+        QL_Op* node = new QL_FileScan(rmm, relations[i], attributes[i]);
         opTree.push_back(node);
     }
+    
     // do the cross product of relations
-    shared_ptr<QL_Op> xnode;
+    QL_Op* xnode;
     if (nRelations > 1) {
-        xnode.reset(new QL_Cross(*opTree[0], *opTree[1]));
+        xnode = new QL_Cross(*opTree[0], *opTree[1]);
         opTree.push_back(xnode);
     }
     for (int i = 2; i < nRelations; i++) {
-        xnode.reset(new QL_Cross(*xnode, *opTree[i]));
-        opTree.push_back(xnode);  
+        xnode = new QL_Cross(*xnode, *opTree[i]);
+        opTree.push_back(xnode);
     }
-    shared_ptr<QL_Op> root = opTree.back();
-    for (unsigned int i = 0; i < opTree.size(); i++) {
-        cout<<opTree[i]->opType<<endl;
+
+    // define one filter for each condition
+    QL_Op* cnode = opTree.back();
+    for (int i = 0; i < nConditions; i++) {
+        cnode = new QL_Condition(*cnode, &conditions[i], 
+            cnode->attributes);
+        opTree.push_back(cnode);
     }
     // print the result
+    QL_Op* root = opTree.back();
+    if (bQueryPlans) {
+        printPlanHeader("SELECT", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
     vector<char> data;
     QL_ErrorForward(root->Open());
     DataAttrInfo* attrs = &(root->attributes[0]);
     Printer p(attrs, root->attributes.size());
     p.PrintHeader(cout);
     while (root->Next(data) == OK_RC) {
-        p.Print(cout, &data[0]);
+         p.Print(cout, &data[0]);
     }
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
+    for (unsigned int i = 0; i < opTree.size(); i++) {
+        delete opTree[i];
+    }
+    ///////////////////////////////////////////////////////////////
     return OK_RC;
 }
 
@@ -128,14 +170,6 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 */
 RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[]) {
-    /* 
-    int i;
-    cout << "Insert\n";
-    cout << "   relName = " << relName << "\n";
-    cout << "   nValues = " << nValues << "\n";
-    for (i = 0; i < nValues; i++)
-        cout << "   values[" << i << "]:" << values[i] << "\n";
-    */
     RC WARN = QL_INSERT_WARN, ERR = QL_INSERT_ERR;
     if ((strcmp(relName, "relcat") == 0)
         || (strcmp(relName, "attrcat") == 0)) {
@@ -199,14 +233,6 @@ RC QL_Manager::Insert(const char *relName,
 */
 RC QL_Manager::Delete(const char *relName,
                       int nConditions, const Condition conditions[]) {
-    /*
-    int i;
-    cout << "Delete\n";
-    cout << "   relName = " << relName << "\n";
-    cout << "   nCondtions = " << nConditions << "\n";
-    for (i = 0; i < nConditions; i++)
-        cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-    */
     RC WARN = QL_DELETE_WARN, ERR = QL_DELETE_ERR;
     // validate the inputs
     if ((strcmp(relName, "relcat") == 0)
@@ -273,7 +299,8 @@ RC QL_Manager::Delete(const char *relName,
         for (int i = 0; i < nConditions; i++) {
             if (!conditions[i].bRhsIsAttr) {
                 found = true;
-                attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
+                attrInd = findAttr(0, conditions[i].lhsAttr.attrName, 
+                    attributes);
                 value = conditions[i].rhsValue.data;
                 cmp = conditions[i].op;
                 break;
@@ -292,7 +319,7 @@ RC QL_Manager::Delete(const char *relName,
     else {
         // use index scan
         CompOp cmp = conditions[idxno].op;
-        int attrInd = findAttr(conditions[idxno].lhsAttr.attrName, 
+        int attrInd = findAttr(0, conditions[idxno].lhsAttr.attrName, 
                                     attributes);
         scanner.reset(new QL_IndexScan(rmm, ixm, relName, attrInd, cmp, 
             conditions[idxno].rhsValue.data, NO_HINT, attributes));
@@ -347,19 +374,6 @@ RC QL_Manager::Update(const char *relName,
                       const RelAttr &rhsRelAttr,
                       const Value &rhsValue,
                       int nConditions, const Condition conditions[]) {
-    /*
-    int i;
-    cout << "Update\n";
-    cout << "   relName = " << relName << "\n";
-    cout << "   updAttr:" << updAttr << "\n";
-    if (bIsValue)
-        cout << "   rhs is value: " << rhsValue << "\n";
-    else
-        cout << "   rhs is attribute: " << rhsRelAttr << "\n";
-    cout << "   nCondtions = " << nConditions << "\n";
-    for (i = 0; i < nConditions; i++)
-        cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
-    */
     RC WARN = QL_UPDATE_WARN, ERR = QL_UPDATE_ERR;
     // validate the inputs
     if ((strcmp(relName, "relcat") == 0)
@@ -374,19 +388,26 @@ RC QL_Manager::Update(const char *relName,
         if (!isValidCondition(conditions[i], attributes)) 
             return QL_INVALID_WARN;
     }
-    int upInd = findAttr(updAttr.attrName, attributes);
+    int upInd = findAttr(0, updAttr.attrName, attributes);
     if (upInd < 0) return QL_INVALID_WARN;
     if (bIsValue) {
         if (attributes[upInd].attrType != rhsValue.type) 
             return QL_INVALID_WARN;
     }
     else {
-        int j = findAttr(rhsRelAttr.attrName, attributes);
+        int j = findAttr(0, rhsRelAttr.attrName, attributes);
         if (j < 0) return QL_INVALID_WARN;
         if (attributes[upInd].attrType != attributes[j].attrType) 
             return QL_INVALID_WARN;
     }
     if (bQueryPlans) printPlanHeader("UPDATE ", relName);
+    if (!bIsValue && strcmp(updAttr.attrName, rhsRelAttr.attrName) == 0) {
+        if (bQueryPlans) {
+            cout<<"TRIVIAL UPDATE, NO ACTION NEEDED"<<endl;
+            printPlanFooter();
+            return OK_RC;
+        }
+    }
     // Now all inputs are valid, set up the appropriate scan
     int indexCond = -1, attrIndex = -1;
     for (int i = 0; i < nConditions; i++) {
@@ -394,7 +415,7 @@ RC QL_Manager::Update(const char *relName,
         if (strcmp(conditions[i].lhsAttr.attrName, updAttr.attrName) == 0)
             continue;
         if (conditions[i].op != EQ_OP) continue;
-        attrIndex = findAttr(conditions[i].lhsAttr.attrName, attributes);
+        attrIndex = findAttr(0, conditions[i].lhsAttr.attrName, attributes);
         if (attributes[attrIndex].indexNo >=0) {
             indexCond = i;
             break;
@@ -412,7 +433,8 @@ RC QL_Manager::Update(const char *relName,
         for (int i = 0; i < nConditions; i++) {
             if (!conditions[i].bRhsIsAttr) {
                 found = true;
-                attrInd = findAttr(conditions[i].lhsAttr.attrName, attributes);
+                attrInd = findAttr(0, conditions[i].lhsAttr.attrName, 
+                    attributes);
                 value = conditions[i].rhsValue.data;
                 cmp = conditions[i].op;
                 break;
@@ -480,7 +502,7 @@ RC QL_Manager::Update(const char *relName,
                 memcpy(updatePos, rhsValue.data, attributes[upInd].attrLength);
             }
             else {
-                int j = findAttr(rhsRelAttr.attrName, attributes);
+                int j = findAttr(0, rhsRelAttr.attrName, attributes);
                 void *sourcePos = (void*) &data[attributes[j].offset];
                 if (attributes[upInd].attrLength < attributes[j].attrLength) {
                     memcpy(updatePos, sourcePos, attributes[upInd].attrLength);
@@ -615,12 +637,18 @@ bool QL_Manager::isValidCondition(const Condition &cond,
     AttrType lhs = INT, rhs = FLOAT;
     bool foundl = false, foundr = (cond.bRhsIsAttr == 0);
     for (unsigned int i = 0; i < attributes.size(); i++) {
-        if (strcmp(cond.lhsAttr.attrName, attributes[i].attrName) == 0) {
+        if (strcmp(cond.lhsAttr.attrName, attributes[i].attrName) == 0 &&
+            (cond.lhsAttr.relName == 0 || 
+                strcmp(cond.lhsAttr.relName, attributes[i].relName) == 0)
+            ) {
             lhs = attributes[i].attrType;
             foundl = true;
         }
         if (cond.bRhsIsAttr) {
-            if (strcmp(cond.rhsAttr.attrName, attributes[i].attrName) == 0) {
+            if (strcmp(cond.rhsAttr.attrName, attributes[i].attrName) == 0 &&
+                (cond.rhsAttr.relName == 0 || 
+                strcmp(cond.rhsAttr.relName, attributes[i].relName) == 0)
+                ) {
                 rhs = attributes[i].attrType;
                 foundr = true;
             }
@@ -667,13 +695,19 @@ bool QL_Manager::evalCondition(void* data, const Condition &cond,
     int len1 = 4, len2 = 4;
     AttrType type = INT;
     for (unsigned int i = 0; i < attributes.size(); i++) {
-        if (strcmp(cond.lhsAttr.attrName, attributes[i].attrName) == 0) {
+        if (strcmp(cond.lhsAttr.attrName, attributes[i].attrName) == 0 &&
+            (cond.lhsAttr.relName == 0 || 
+                strcmp(cond.lhsAttr.relName, attributes[i].relName) == 0)
+            ) {
             attr1 = (void*) ((char*) data + attributes[i].offset);
             len1 = attributes[i].attrLength;
             type = attributes[i].attrType;
         }
         if (cond.bRhsIsAttr) {
-            if (strcmp(cond.rhsAttr.attrName, attributes[i].attrName) == 0) {
+            if (strcmp(cond.rhsAttr.attrName, attributes[i].attrName) == 0 &&
+                (cond.rhsAttr.relName == 0 || 
+                strcmp(cond.rhsAttr.relName, attributes[i].relName) == 0)
+                ) {
                 attr2 = (void*) ((char*) data + attributes[i].offset);
                 len2 = attributes[i].attrLength;
             }
@@ -689,10 +723,13 @@ bool QL_Manager::evalCondition(void* data, const Condition &cond,
 
 /*  Find attribute info by attribute name 
 */
-int QL_Manager::findAttr(char* attrName, 
-                    vector<DataAttrInfo> &attributes) {
+int QL_Manager::findAttr(const char* relName, const char* attrName, 
+                    const vector<DataAttrInfo> &attributes) {
     for (unsigned int i = 0; i < attributes.size(); i++) {
-        if (strcmp(attrName, attributes[i].attrName) == 0) {
+        if (strcmp(attrName, attributes[i].attrName) == 0 &&
+            (relName == 0 || 
+                strcmp(relName, attributes[i].relName) == 0)
+            ) {
             return i;
         }
     }

@@ -8,13 +8,13 @@
 #define QL_INT_H
 
 enum OpType {
-	RM_LEAF,
-	IX_LEAF,
-	EQ_COND,
-	NE_COND,
-	RANGE_COND,
-	REL_CROSS,
-	REL_JOIN
+	RM_LEAF = 1,
+	IX_LEAF = 2,
+	EQ_COND = 3,
+	NE_COND = 4,
+	RANGE_COND = 5,
+	REL_CROSS = -1,
+	REL_JOIN = -2
 };
 
 
@@ -33,20 +33,21 @@ public:
     virtual RC Close() = 0; 
     virtual RC Reset() = 0;
     OpType opType;
+    std::stringstream desc;
 };
 
 
 
 class QL_UnaryOp : public QL_Op {
 public:
-    std::shared_ptr<QL_Op> child;
+    QL_Op* child;
 };
 
 
 class QL_BinaryOp : public QL_Op {
 public:
-    std::shared_ptr<QL_Op> lchild;
-    std::shared_ptr<QL_Op> rchild;
+    QL_Op* lchild;
+    QL_Op* rchild;
 };
 
 /////////////////////////////////////////////////////
@@ -112,7 +113,7 @@ private:
 
 class QL_Condition: public QL_UnaryOp {
 public:
-	QL_Condition(QL_Op &child, Condition cond,
+	QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_Condition();
 	RC Open();
@@ -121,7 +122,7 @@ public:
 	RC Close();
 private:
 	bool isOpen;
-	Condition cond;
+	const Condition* cond;
 };
 
 /////////////////////////////////////////////////////
@@ -144,4 +145,9 @@ private:
 	int leftRecSize;
 };
 
+/////////////////////////////////////////////////////
+// Function for printing operator tree
+/////////////////////////////////////////////////////
+
+void printOperatorTree(QL_Op* root, int tabs);
 #endif

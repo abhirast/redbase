@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <cassert>
 #include <unistd.h>
+#include <sstream>
 #include <memory>
 #include "redbase.h"
 #include "ql.h"
@@ -32,6 +33,8 @@ QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex,
 	isOpen = false;
 	child = 0;
 	opType = RM_LEAF;
+	desc << "FILE SCAN " << relName << " ON ";
+	desc << attributes[attrIndex].attrName;
 }
 
 QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName,
@@ -47,6 +50,8 @@ QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName,
 	this->attributes = attributes;
 	isOpen = false;
 	child = 0;
+	opType = RM_LEAF;
+	desc << "FILE SCAN " << relName;
 }
 
 QL_FileScan::~QL_FileScan() {
@@ -63,28 +68,27 @@ RC QL_FileScan::Open() {
 }
 
 RC QL_FileScan::Next(vector<char> &rec) {
-	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
+	RC WARN = QL_EOF, ERR = QL_FILESCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
-	memcpy(&rec[0], temp, attributes.back().offset + 
-							attributes.back().attrLength);
+	memcpy(&rec[0], temp, rec.size());
 	return OK_RC;
 }
 
 RC QL_FileScan::Next(vector<char> &rec, RID &rid) {
-	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
+	RC WARN = QL_EOF, ERR = QL_FILESCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
-	rec.resize(attributes.back().offset + attributes.back().attrLength);
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	QL_ErrorForward(fs.GetNextRec(record));
 	QL_ErrorForward(record.GetData(temp));
 	QL_ErrorForward(record.GetRid(rid));
-	memcpy(&rec[0], temp, attributes.back().offset + 
-		attributes.back().attrLength);
+	memcpy(&rec[0], temp, rec.size());
 	return OK_RC;
 }
 
@@ -124,6 +128,8 @@ QL_IndexScan::QL_IndexScan(RM_Manager *rmm, IX_Manager *ixm,
 	isOpen = false;
 	child = 0;
 	opType = IX_LEAF;
+	desc << "INDEX SCAN " << relName << " ON ";
+	desc << attributes[attrIndex].attrName;
 }
 
 QL_IndexScan::~QL_IndexScan() {
@@ -140,11 +146,12 @@ RC QL_IndexScan::Open() {
 }
 
 RC QL_IndexScan::Next(vector<char> &rec) {
-	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
+	RC WARN = QL_EOF, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
 	RID rid;
 	RM_Record record;
 	char *temp;
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	QL_ErrorForward(is.GetNextEntry(rid));
 	QL_ErrorForward(fh.GetRec(rid, record));
 	QL_ErrorForward(record.GetData(temp));
@@ -154,11 +161,11 @@ RC QL_IndexScan::Next(vector<char> &rec) {
 }
 
 RC QL_IndexScan::Next(vector<char> &rec, RID &rid) {
-	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
+	RC WARN = QL_EOF, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
 	RM_Record record;
 	char *temp;
-	rec.resize(attributes.back().offset + attributes.back().attrLength);
+	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	QL_ErrorForward(is.GetNextEntry(rid));
 	QL_ErrorForward(fh.GetRec(rid, record));
 	QL_ErrorForward(record.GetData(temp));
@@ -189,17 +196,24 @@ RC QL_IndexScan::Close() {
 // Conditional select operator
 /////////////////////////////////////////////////////
 
-QL_Condition::QL_Condition(QL_Op &child, Condition cond,
+QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes) {
 	this->attributes = attributes;
-	this->child.reset(&child);
+	this->child = &child;
+	this->cond = cond;
 	isOpen = false;
-	if (cond.op == EQ_OP) {
+	if (cond->op == EQ_OP) {
 		opType = EQ_COND;
-	} else if (cond.op == NE_OP){
+	} else if (cond->op == NE_OP){
 		opType = NE_COND;
 	} else {
 		opType = RANGE_COND;
+	}
+	desc << "FILTER BY " << cond->lhsAttr << cond->op;
+	if (cond->bRhsIsAttr) {
+		desc << cond->rhsAttr;
+	} else {
+		desc << cond->rhsValue;
 	}
 }
 
@@ -210,17 +224,17 @@ QL_Condition::~QL_Condition() {
 RC QL_Condition::Open() {
 	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
 	if (isOpen) return WARN;
-	QL_ErrorForward((child.get())->Open());
+	QL_ErrorForward(child->Open());
 	isOpen = true;
 	return OK_RC;
 }
 
 RC QL_Condition::Next(vector<char> &rec) {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_EOF, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
 	do {
 		QL_ErrorForward(child->Next(rec));
-	} while(!QL_Manager::evalCondition((void*) &rec[0], cond, attributes));
+	} while(!QL_Manager::evalCondition((void*) &rec[0], *cond, attributes));
 	return OK_RC;
 }
 
@@ -234,7 +248,7 @@ RC QL_Condition::Reset() {
 RC QL_Condition::Close() {
 	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
 	if (!isOpen) return WARN;
-	QL_ErrorForward(child->Reset());
+	QL_ErrorForward(child->Close());
 	isOpen = false;
 	return OK_RC;
 }
@@ -244,8 +258,8 @@ RC QL_Condition::Close() {
 /////////////////////////////////////////////////////
 
 QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
-	this->lchild.reset(&left);
-	this->rchild.reset(&right);
+	this->lchild = &left;
+	this->rchild = &right;
 	isOpen = false;
 	leftValid = false;
 	attributes = lchild->attributes;
@@ -261,6 +275,7 @@ QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
 		attributes[i].indexNo = -1;
 	}
 	opType = REL_CROSS;
+	desc << "CROSS PROD";
 }
 
 QL_Cross::~QL_Cross() {}
@@ -272,11 +287,11 @@ RC QL_Cross::Open() {
 	QL_ErrorForward(rchild->Open());
 	isOpen = true;
 	leftValid = false;
-	return WARN;
+	return OK_RC;
 }
 
 RC QL_Cross::Next(vector<char> &rec) {
-	RC WARN = QL_CROSS_WARN, ERR = QL_CROSS_ERR;
+	RC WARN = QL_EOF, ERR = QL_CROSS_ERR;
 	if (!leftValid) {
 		QL_ErrorForward(lchild->Next(leftrec));
 		leftValid = true;
@@ -287,9 +302,10 @@ RC QL_Cross::Next(vector<char> &rec) {
 		QL_ErrorForward(rchild->Next(rightrec));
 		QL_ErrorForward(lchild->Next(leftrec));
 	} else if (rc != OK_RC) {
+		cout<<"adfadfaf\n\n\n\n\n";
 		return rc;
 	}
-	rec.resize(leftrec.size() + rightrec.size());
+	rec.resize(leftrec.size() + rightrec.size(), 0);
 	memcpy(&rec[0], &leftrec[0], leftrec.size());
 	memcpy(&rec[leftrec.size()], &rightrec[0], rightrec.size());
 	return OK_RC;
@@ -312,3 +328,27 @@ RC QL_Cross::Close() {
 	return OK_RC;
 }
 
+/////////////////////////////////////////////////////
+// Print Operator Tree
+/////////////////////////////////////////////////////
+
+void printOperatorTree(QL_Op* root, int tabs) {
+	if (root == 0) return;
+	for (int i = 0; i < tabs; i++) cout<<"  ";
+	if (root->opType > 0) {
+		// unary operator
+		auto temp = (QL_UnaryOp*) root;
+		cout << root->desc.str() << endl;
+		printOperatorTree(temp->child, tabs);
+	} else {
+		// binary operator
+		auto temp = (QL_BinaryOp*) root;
+		cout << root->desc.str() << " { " << endl;
+		printOperatorTree(temp->lchild, tabs+1);
+		for (int i = 0; i < tabs + 1; i++) cout<<"  ";
+		cout << "," << endl;
+		printOperatorTree(temp->rchild, tabs+1);
+		for (int i = 0; i < tabs; i++) cout<<"  ";
+		cout << " } " << endl;
+	}
+}
