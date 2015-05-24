@@ -518,6 +518,62 @@ RC QL_Cross::Close() {
 
 
 /////////////////////////////////////////////////////
+// Query Optimizers
+/////////////////////////////////////////////////////
+void QL_Optimizer::pushCondition(QL_Condition* cond) {
+
+}
+
+void QL_Optimizer::pushProjection(QL_Projection* proj) {
+
+}
+
+void QL_Optimizer::swapUnUnOpPointers(QL_UnaryOp* up, QL_UnaryOp* down) {
+	if (up->parent) {
+		if (up->parent->opType >= 0) {
+			// its a unary op
+			auto uop = (QL_UnaryOp*) up->parent;
+			uop->child = down;
+		} 
+		else if (up->parent->opType < 0) {
+			auto bop = (QL_BinaryOp*) up->parent;
+			if (bop->lchild == up) bop->lchild = down;
+			if (bop->rchild == up) bop->rchild = down;
+		}
+	}
+	if (down->child) down->child->parent = up;
+	up->child = down->child;
+	down->parent = up->parent;
+	up->parent = down;
+	down->child = up;
+}
+
+void QL_Optimizer::swapUnBinOpPointers(QL_UnaryOp* up, QL_BinaryOp* down, 
+								bool pushRight) {
+	// variable names according to case than the unary operator needs to
+	// be pushed towards the right child of binary operator
+	QL_Op *right = (pushRight) ? down->rchild : down->lchild;
+	if (up->parent) {
+		if (up->parent->opType >= 0) {
+			// its a unary op
+			auto uop = (QL_UnaryOp*) up->parent;
+			uop->child = down;
+		} 
+		else if (up->parent->opType < 0) {
+			auto bop = (QL_BinaryOp*) up->parent;
+			if (bop->lchild == up) bop->lchild = down;
+			if (bop->rchild == up) bop->rchild = down;
+		}
+	}
+	right->parent = up;
+	up->child = right;
+	down->parent = up->parent;
+	up->parent = down;
+	if (pushRight) down->rchild = up;
+	if (!pushRight) down->lchild = up;
+}
+
+/////////////////////////////////////////////////////
 // Print Operator Tree
 /////////////////////////////////////////////////////
 

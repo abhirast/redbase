@@ -189,11 +189,17 @@ private:
 };
 
 /////////////////////////////////////////////////////
-// Function for checking if an operator can be pushed
+// Query tree optimizer
 /////////////////////////////////////////////////////
 
 class QL_Optimizer {
-	static bool canPush(QL_Op* op);
+public:
+	static void pushCondition(QL_Condition* cond);
+	static void pushProjection(QL_Projection* proj);
+private:
+	static void swapUnUnOpPointers(QL_UnaryOp* up, QL_UnaryOp* down);
+	static void swapUnBinOpPointers(QL_UnaryOp* up, QL_BinaryOp* down, 
+		bool pushRight);
 };
 
 
