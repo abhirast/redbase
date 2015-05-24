@@ -94,6 +94,7 @@ public:
 	RC Next(std::vector<char> &rec);
 	RC Next(std::vector<char> &rec, RID &rid);
 	RC Reset();
+	RC Reset(void* value);
 	RC Close();
 private:
 	std::string relName;
@@ -186,6 +187,7 @@ private:
 	bool leftValid;
 	int leftRecSize;
 };
+
 
 /////////////////////////////////////////////////////
 // Function for printing operator tree

@@ -182,6 +182,15 @@ RC QL_IndexScan::Reset() {
 	return OK_RC;
 }
 
+RC QL_IndexScan::Reset(void *value) {
+	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
+	if (!isOpen) return WARN;
+	this->value = value;
+	QL_ErrorForward(is.CloseScan());
+	QL_ErrorForward(is.OpenScan(ih, cmp, value, hint));
+	return OK_RC;
+}
+
 RC QL_IndexScan::Close() {
 	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
@@ -202,6 +211,10 @@ QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 	this->child = &child;
 	this->cond = cond;
 	isOpen = false;
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].indexNo = -1;
+	}
 	if (cond->op == EQ_OP) {
 		opType = EQ_COND;
 	} else if (cond->op == NE_OP){
@@ -282,6 +295,10 @@ QL_Projection::QL_Projection(QL_Op &child, int nSelAttrs,
 	for (unsigned int i = 0; i < this->attributes.size(); i++) {
 		this->attributes[i].offset = cum;
 		cum += this->attributes[i].attrLength;
+	}
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].indexNo = -1;
 	}
 	opType = PROJ;
 	desc << "PROJECT ";
@@ -366,6 +383,10 @@ QL_PermDup::QL_PermDup(QL_Op &child, int nSelAttrs,
 	for (unsigned int i = 0; i < this->attributes.size(); i++) {
 		this->attributes[i].offset = cum;
 		cum += this->attributes[i].attrLength;
+	}
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].indexNo = -1;
 	}
 	opType = PERM_DUP;
 	desc << "PERMUTE/DUPLICTE ATTRIBUTES";
@@ -466,7 +487,6 @@ RC QL_Cross::Next(vector<char> &rec) {
 		QL_ErrorForward(rchild->Next(rightrec));
 		QL_ErrorForward(lchild->Next(leftrec));
 	} else if (rc != OK_RC) {
-		cout<<"adfadfaf\n\n\n\n\n";
 		return rc;
 	}
 	rec.resize(leftrec.size() + rightrec.size(), 0);

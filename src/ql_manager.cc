@@ -1,10 +1,7 @@
 //
-// ql_manager_stub.cc
+// ql_manager.cc
 //
 
-// Note that for the SM component (HW3) the QL is actually a
-// simple stub that will allow everything to compile.  Without
-// a QL stub, we would need two parsers.
 
 #include <sys/times.h>
 #include <sys/types.h>
@@ -790,14 +787,14 @@ int QL_Manager::findAttr(const char* relName, const char* attrName,
 }
 
 void QL_Manager::printPlanHeader(const char* operation, const char* relname) {
-    cout<<"********************************************\n";
-    cout<<"Query Execution Plan"<<endl;
-    cout<<"-----------------------\n";
-    cout<<"Operation: "<<operation<<" "<<relname<<endl;
-    cout<<"-----------------------\n";
+    cout << "********************************************\n";
+    cout << "Query Execution Plan" << endl;
+    cout << "-----------------------\n";
+    cout << "Operation: " << operation << " " << relname << endl;
+    cout << "-----------------------\n";
 }
 
 
 void QL_Manager::printPlanFooter() {
-    cout<<"\n********************************************\n\n";
+    cout << "\n********************************************\n\n";
 }
