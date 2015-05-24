@@ -109,7 +109,7 @@ RC QL_FileScan::Close() {
 	RC WARN = QL_FILESCAN_WARN, ERR = QL_FILESCAN_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(fs.CloseScan());
-	QL_ErrorForward(rmm->CloseFile(fh));
+	//QL_ErrorForward(rmm->CloseFile(fh));
 	isOpen = false;
 	return OK_RC;
 }
@@ -524,11 +524,22 @@ RC QL_Cross::Close() {
 // Query Optimizers
 /////////////////////////////////////////////////////
 void QL_Optimizer::pushCondition(QL_Op* &root) {
-	if (!root || root->opType != COND) return;
+	if (!root) return;
+	if (root->opType > 0) {
+		auto temp = (QL_UnaryOp*) root;
+		pushCondition(temp->child);
+	}
+	if (root->opType < 0) {
+		auto temp = (QL_BinaryOp*) root;
+		pushCondition(temp->lchild);
+		pushCondition(temp->rchild);
+	}
+	if (root->opType != COND) return;
 	auto cond = (QL_Condition*) root;
 	if (cond->child->opType == COND) {
 		auto down = (QL_Condition*) cond->child;
 		swapUnUnOpPointers(cond, down);
+		root = down;
 		pushCondition(down->child);
 	}
 	else if (cond->child->opType == RM_LEAF) {
@@ -561,6 +572,7 @@ void QL_Optimizer::pushCondition(QL_Op* &root) {
 		swapUnBinOpPointers(cond, down, goRight);
 		// reset attributes of cond
 		cond->attributes = cond->child->attributes;
+		root = down;
 		if (goRight) pushCondition(down->rchild);
 		else pushCondition(down->lchild);
 	}

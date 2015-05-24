@@ -160,31 +160,26 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     /************************************
         Optimize the query plan
     *************************************/
-    for (int i = opTree.size() - 1; i >= 0; i--) {
-        if (opTree[i] != 0 && opTree[i]->opType == COND) {
-            QL_Optimizer::pushCondition(opTree[i]);
-        }
-    }
-
-    // print the result
     QL_Op* root = opTree.back();
+    QL_Optimizer::pushCondition(root);
+    
+    // print the result
     if (bQueryPlans) {
         printPlanHeader("SELECT", " ");
         printOperatorTree(root, 0);
         printPlanFooter();
     }
-    /*
+
     vector<char> data;
     QL_ErrorForward(root->Open());
     DataAttrInfo* attrs = &(root->attributes[0]);
     Printer p(attrs, root->attributes.size());
     p.PrintHeader(cout);
     while (root->Next(data) == OK_RC) {
-         p.Print(cout, &data[0]);
+        p.Print(cout, &data[0]);
     }
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
-    */
     delete root;
     //////////////////////////////////////////////////////////////
     return OK_RC;
