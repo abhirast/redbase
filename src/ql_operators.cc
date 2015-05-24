@@ -521,7 +521,20 @@ RC QL_Cross::Close() {
 // Query Optimizers
 /////////////////////////////////////////////////////
 void QL_Optimizer::pushCondition(QL_Condition* cond) {
+	if (cond->child->opType == COND) {
+		auto down = (QL_Condition*) cond->child;
+		swapUnUnOpPointers(cond, down);
+		pushCondition(cond);
+	} 
+	else if (cond->child->opType == RM_LEAF) {
 
+	}
+	else if (cond->child->opType == REL_CROSS) {
+		// find the link to follow	
+	}
+	else {
+		return;
+	}
 }
 
 void QL_Optimizer::pushProjection(QL_Projection* proj) {

@@ -157,7 +157,15 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
             opTree.push_back(permdup);
         }
     }
-
+    /************************************
+        Optimize the query plan
+    *************************************/
+    for (int i = opTree.size() - 1; i >= 0; i--) {
+        if (opTree[i]->opType == COND) {
+            QL_Optimizer::pushCondition((QL_Condition*) opTree[i]);
+            break;
+        }
+    }
 
     // print the result
     QL_Op* root = opTree.back();
@@ -167,7 +175,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         printPlanFooter();
     }
     vector<char> data;
-    /*QL_ErrorForward(root->Open());
+    QL_ErrorForward(root->Open());
     DataAttrInfo* attrs = &(root->attributes[0]);
     Printer p(attrs, root->attributes.size());
     p.PrintHeader(cout);
@@ -176,7 +184,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     }
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
-    */
+    
     delete root;
     //////////////////////////////////////////////////////////////
     return OK_RC;
