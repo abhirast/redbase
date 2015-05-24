@@ -56,11 +56,12 @@ public:
 /////////////////////////////////////////////////////
 
 class QL_FileScan: public QL_UnaryOp {
+	friend class QL_Optimizer;
 public:
-	QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex, 
-		CompOp cmp, void* value, ClientHint hint, 
+	QL_FileScan(RM_Manager *rmm, IX_Manager *ixm, const char *relName, 
+		int attrIndex, CompOp cmp, void* value, ClientHint hint, 
 		const std::vector<DataAttrInfo> &attributes);
-	QL_FileScan(RM_Manager *rmm, const char *relName,  
+	QL_FileScan(RM_Manager *rmm, IX_Manager *ixm, const char *relName,  
 		const std::vector<DataAttrInfo> &attributes);
 	~QL_FileScan();
 	RC Open();
@@ -71,6 +72,7 @@ public:
 private:
 	std::string relName;
 	RM_Manager *rmm;
+	IX_Manager *ixm;
 	RM_FileHandle fh;
 	AttrType type;
 	int len;
@@ -114,6 +116,7 @@ private:
 /////////////////////////////////////////////////////
 
 class QL_Condition: public QL_UnaryOp {
+	friend class QL_Optimizer;
 public:
 	QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes);
@@ -194,12 +197,14 @@ private:
 
 class QL_Optimizer {
 public:
-	static void pushCondition(QL_Condition* cond);
-	static void pushProjection(QL_Projection* proj);
+	static void pushCondition(QL_Op* &root);
+	static void pushProjection(QL_Op* &root);
 private:
 	static void swapUnUnOpPointers(QL_UnaryOp* up, QL_UnaryOp* down);
 	static void swapUnBinOpPointers(QL_UnaryOp* up, QL_BinaryOp* down, 
 		bool pushRight);
+	static bool attrGoesRight(const char* relName, const char* attrName, 
+											QL_BinaryOp *op);
 };
 
 

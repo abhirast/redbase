@@ -112,7 +112,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     // define a filescan op for each relation
     vector<QL_Op*> opTree;
     for (int i = 0; i < nRelations; i++) {
-        QL_Op* node = new QL_FileScan(rmm, relations[i], attributes[i]);
+        QL_Op* node = new QL_FileScan(rmm, ixm, relations[i], attributes[i]);
         opTree.push_back(node);
     }
     
@@ -161,9 +161,8 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         Optimize the query plan
     *************************************/
     for (int i = opTree.size() - 1; i >= 0; i--) {
-        if (opTree[i]->opType == COND) {
-            QL_Optimizer::pushCondition((QL_Condition*) opTree[i]);
-            break;
+        if (opTree[i] != 0 && opTree[i]->opType == COND) {
+            QL_Optimizer::pushCondition(opTree[i]);
         }
     }
 
@@ -174,6 +173,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         printOperatorTree(root, 0);
         printPlanFooter();
     }
+    /*
     vector<char> data;
     QL_ErrorForward(root->Open());
     DataAttrInfo* attrs = &(root->attributes[0]);
@@ -184,7 +184,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     }
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
-    
+    */
     delete root;
     //////////////////////////////////////////////////////////////
     return OK_RC;
@@ -339,7 +339,7 @@ RC QL_Manager::Delete(const char *relName,
         if (!found) cmp = NO_OP;
         
         dinfo = &attributes[attrInd];
-        scanner.reset(new QL_FileScan(rmm, relName, attrInd,
+        scanner.reset(new QL_FileScan(rmm, ixm, relName, attrInd,
             cmp, value, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;
@@ -472,7 +472,7 @@ RC QL_Manager::Update(const char *relName,
         
         if (!found) cmp = NO_OP;
         dinfo = &attributes[attrInd];
-        scanner.reset(new QL_FileScan(rmm, relName, attrInd, 
+        scanner.reset(new QL_FileScan(rmm, ixm, relName, attrInd, 
             cmp, value, NO_HINT, attributes));
         if (bQueryPlans) {
             cout<<"FILE SCAN ON "<<dinfo->attrName<<endl;

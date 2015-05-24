@@ -18,11 +18,12 @@ using namespace std;
 //	QL_FileScan
 ////////////////////////////////////////////////////////
 
-QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex, 
-		CompOp cmp, void* value, ClientHint hint, 
+QL_FileScan::QL_FileScan(RM_Manager *rmm, IX_Manager*ixm, const char *relName, 
+		int attrIndex, CompOp cmp, void* value, ClientHint hint, 
 		const std::vector<DataAttrInfo> &attributes) {
 	this->relName.assign(relName);
 	this->rmm = rmm;
+	this->ixm =ixm;
 	this->type = attributes[attrIndex].attrType;
 	this->len = attributes[attrIndex].attrLength;
 	this->offset = attributes[attrIndex].offset;
@@ -38,10 +39,12 @@ QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex,
 	desc << attributes[attrIndex].attrName;
 }
 
-QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName,
+QL_FileScan::QL_FileScan(RM_Manager *rmm, IX_Manager* ixm,  
+		const char *relName,
 		const std::vector<DataAttrInfo> &attributes) {
 	this->relName.assign(relName);
 	this->rmm = rmm;
+	this->ixm = ixm;
 	this->type = INT;
 	this->len = 4;
 	this->offset = 0;
@@ -520,25 +523,55 @@ RC QL_Cross::Close() {
 /////////////////////////////////////////////////////
 // Query Optimizers
 /////////////////////////////////////////////////////
-void QL_Optimizer::pushCondition(QL_Condition* cond) {
+void QL_Optimizer::pushCondition(QL_Op* &root) {
+	if (!root || root->opType != COND) return;
+	auto cond = (QL_Condition*) root;
 	if (cond->child->opType == COND) {
 		auto down = (QL_Condition*) cond->child;
 		swapUnUnOpPointers(cond, down);
-		pushCondition(cond);
-	} 
+		pushCondition(down->child);
+	}
 	else if (cond->child->opType == RM_LEAF) {
-
+		// change only if it is an == condition with rhs as value
+		if (cond->getOp() != EQ_OP) return;
+		if (cond->cond->bRhsIsAttr) return;
+		// change only if the attribute in the condition is indexed 
+		auto down = (QL_FileScan*) cond->child;
+		int attrIndex = QL_Manager::findAttr(0, 
+			cond->cond->lhsAttr.attrName, down->attributes);
+		if (down->attributes[attrIndex].indexNo < 0) return;
+		// define a new index scan
+		QL_Op* iscan = new QL_IndexScan(down->rmm, down->ixm, 
+			down->relName.c_str(), attrIndex, cond->cond->op, 
+			cond->cond->rhsValue.data, NO_HINT, down->attributes);
+		root = iscan;
+		delete cond;
 	}
 	else if (cond->child->opType == REL_CROSS) {
-		// find the link to follow	
+		// find the link to follow
+		auto down = (QL_BinaryOp*) cond->child;
+		const RelAttr* lhs = &cond->cond->lhsAttr;
+		bool goRight = attrGoesRight(lhs->relName, lhs->attrName, down);
+		if (cond->cond->bRhsIsAttr) {
+			const RelAttr* rhs = &cond->cond->rhsAttr;
+			bool rhsGoRight = attrGoesRight(rhs->relName, rhs->attrName, down);
+			if (goRight != rhsGoRight) return;
+		}
+		// push the condition
+		swapUnBinOpPointers(cond, down, goRight);
+		// reset attributes of cond
+		cond->attributes = cond->child->attributes;
+		if (goRight) pushCondition(down->rchild);
+		else pushCondition(down->lchild);
 	}
 	else {
 		return;
 	}
 }
 
-void QL_Optimizer::pushProjection(QL_Projection* proj) {
-
+void QL_Optimizer::pushProjection(QL_Op* &root) {
+	if (!root || root->opType != PROJ) return;
+	
 }
 
 void QL_Optimizer::swapUnUnOpPointers(QL_UnaryOp* up, QL_UnaryOp* down) {
@@ -584,6 +617,14 @@ void QL_Optimizer::swapUnBinOpPointers(QL_UnaryOp* up, QL_BinaryOp* down,
 	up->parent = down;
 	if (pushRight) down->rchild = up;
 	if (!pushRight) down->lchild = up;
+}
+
+bool QL_Optimizer::attrGoesRight(const char *relName, const char *attrName, 
+									QL_BinaryOp *op) {
+	// finds if an attribute comes from the left of a binary operator
+	if (QL_Manager::findAttr(relName, attrName, 
+					op->rchild->attributes) >= 0) return true;
+	return false;
 }
 
 /////////////////////////////////////////////////////
