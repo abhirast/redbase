@@ -10,11 +10,9 @@
 enum OpType {
 	RM_LEAF = 1,
 	IX_LEAF = 2,
-	EQ_COND = 3,
-	NE_COND = 4,
-	PROJ = 5,
-	PERM_DUP = 6,
-	RANGE_COND = 5,
+	COND = 3,
+	PROJ = 4,
+	PERM_DUP = 0,
 	REL_CROSS = -1,
 	REL_JOIN = -2
 };
@@ -36,6 +34,7 @@ public:
     std::vector<DataAttrInfo> attributes;
     OpType opType;
     std::stringstream desc;
+    QL_Op* parent;
 };
 
 
@@ -123,6 +122,7 @@ public:
 	RC Next(std::vector<char> &rec);
 	RC Reset();
 	RC Close();
+	CompOp getOp();
 private:
 	bool isOpen;
 	const Condition* cond;
@@ -187,6 +187,15 @@ private:
 	bool leftValid;
 	int leftRecSize;
 };
+
+/////////////////////////////////////////////////////
+// Function for checking if an operator can be pushed
+/////////////////////////////////////////////////////
+
+class QL_Optimizer {
+	static bool canPush(QL_Op* op);
+};
+
 
 
 /////////////////////////////////////////////////////

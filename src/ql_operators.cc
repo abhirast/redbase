@@ -32,6 +32,7 @@ QL_FileScan::QL_FileScan(RM_Manager *rmm, const char *relName, int attrIndex,
 	this->attributes = attributes;
 	isOpen = false;
 	child = 0;
+	parent = 0;
 	opType = RM_LEAF;
 	desc << "FILE SCAN " << relName << " ON ";
 	desc << attributes[attrIndex].attrName;
@@ -127,6 +128,7 @@ QL_IndexScan::QL_IndexScan(RM_Manager *rmm, IX_Manager *ixm,
 	this->indexNo = attributes[attrIndex].indexNo;
 	isOpen = false;
 	child = 0;
+	parent = 0;
 	opType = IX_LEAF;
 	desc << "INDEX SCAN " << relName << " ON ";
 	desc << attributes[attrIndex].attrName;
@@ -209,19 +211,14 @@ QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes) {
 	this->attributes = attributes;
 	this->child = &child;
+	child.parent = this;
 	this->cond = cond;
 	isOpen = false;
 	// change indexNo of all attributes
 	for (unsigned int i = 0; i < this->attributes.size(); i++) {
 		this->attributes[i].indexNo = -1;
 	}
-	if (cond->op == EQ_OP) {
-		opType = EQ_COND;
-	} else if (cond->op == NE_OP){
-		opType = NE_COND;
-	} else {
-		opType = RANGE_COND;
-	}
+	opType = COND;
 	desc << "FILTER BY " << cond->lhsAttr << cond->op;
 	if (cond->bRhsIsAttr) {
 		desc << cond->rhsAttr;
@@ -267,6 +264,9 @@ RC QL_Condition::Close() {
 	return OK_RC;
 }
 
+CompOp QL_Condition::getOp() {
+	return cond->op;
+}
 
 /////////////////////////////////////////////////////
 // Projection operator
@@ -276,6 +276,7 @@ QL_Projection::QL_Projection(QL_Op &child, int nSelAttrs,
 	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
 	this->inputAttr = attributes;
 	this->child = &child;
+	child.parent = this;
 	isOpen = false;
 	// construct the output schema, loop through input attrs to see which
 	// of them are present in the selAttrs
@@ -364,6 +365,7 @@ QL_PermDup::QL_PermDup(QL_Op &child, int nSelAttrs,
 	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
 	this->inputAttr = attributes;
 	this->child = &child;
+	child.parent = this;
 	isOpen = false;
 	// construct the output schema, loop through input attrs to see which
 	// of them are present in the selAttrs
@@ -442,6 +444,8 @@ RC QL_PermDup::Close() {
 QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
 	this->lchild = &left;
 	this->rchild = &right;
+	left.parent = this;
+	right.parent = this;
 	isOpen = false;
 	leftValid = false;
 	attributes = lchild->attributes;
@@ -511,6 +515,7 @@ RC QL_Cross::Close() {
 	QL_ErrorForward(rchild->Close());
 	return OK_RC;
 }
+
 
 /////////////////////////////////////////////////////
 // Print Operator Tree
