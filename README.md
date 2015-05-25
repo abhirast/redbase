@@ -71,12 +71,45 @@ This function has similar calling architecture as condition pushing function. It
 
 If the function is called on a node which is not a Projection node then it calls it on its child(ren) and returns. If the node is a projection node then different actions are taken based on the type of its child. The child of a Projection Node on which the call has been made can't be another Projection node. It also can't be a Permute/Duplicate node because pushes are only done downwards. If the child is File Scan or Index Scan then nothing is done because it gives no gain in efficiency. The other two cases are-
 
-(i) Child is Condition node - If the current node is a condition node then 
+(i) Child is Condition node - If the current node is a condition node then two cases exist - (a) The projection passes the attributes involved in the condition. In this case the two operators are commutative and hence the Projection node is swapped with the Condition node. (b) If the condition involves at least one attribute not passed by the projection then the condition is no longer pushed down. Instead a new projection operator is defined as the new child of the condition attribute which passes the condition attributes along with the attributes passed by the Projection node on which the function was called. The function is then called again on the new projection operator.
+
+(ii) Child is Cross Product node - In this case the projection operator splits up. The attributes are partitioned into two parts - one belonging to the right child and other belonging to the left child. Two cases arise (a) If both these partitions are non-empty then the two new projection operators are defined and they are pushed down the two children of the Cross Product node and the original Projection operator is deleted. The function is called again on the newly created Projection operators. (b) If one of the partitions is empty then a new Projection node is created and pushed down the child corresponding to the non-empty partition. The original Projection operator is not created. Ideally, this operation should have created an empty projection operator on the other child, which just throws empty tuples. But the current implementation doesn't support empty tuples and hence it has been avoided. It might not require much work to incorporate it but it has been left for now to deal with more interesting issues.
+
+The result of this optimization on the above mentioned query is as follows - 
+
+PERMUTE/DUPLICATE ATTRIBUTES
+CROSS PROD { 
+  PROJECT S.b, S.d
+  FILTER BY R.b = S.b
+  CROSS PROD { 
+    PROJECT R.b
+    FILTER BY R.c = 1
+    PROJECT R.b, R.c
+    FILE SCAN R
+    ,
+    PROJECT S.b, S.d
+    FILE SCAN S
+   } 
+  ,
+  PROJECT T.e
+  INDEX SCAN T ON e
+ }
 
 
+#### Query Execution ####
+After all this hard work, query execution is just a matter of calling Open, Next and Close on the root node. The resulting tuples are printed using the Printer class.
 
-Extra functionality - Type coercion 
- 
+#### Update and Delete commands ####
+The update and delete command are fairly simple because they involve only one relation and hence the query tree doesn't have any binary node. However these commands were implemented before implementing the select command and hence the query tree formalism has not been used for them. The effect of the same can be seen in the reduced elegance of code. 
+
+#### Extra functionality ####
+Some micro optimizations have been done for the two commands - (i) If the update command is called with a trivial condition e.g, for a relation R(a,b) if the update command is "update R set a = a;" then the update is recognized as a trivial update and nothing is done. (ii) If the delete command has no condition then instead of deleting all the tuples, we can delete and recreate the entire relation. This has been implemented by me but has been commented out because we need to display the deleted tuples as a feedback to the user. I have also implemented type coercion, which changes the type of RHS to match the LHS for conditions in the command.
+
+#### Debugging ####
+I tested my implementation on many hand designed queries on small tables for debugging and also on CS145 ebay-dataset for tests. I also used valgrind to check for memory errors.
+
+#### Acknowledgements ####
+As always, I would like to thank Jaeho for discussion and ideas on many implementation aspects. I also consulted this paper on query optimization for some ideas -http://infolab.stanford.edu/~hyunjung/cs346/ioannidis.pdf 
 
 
 
