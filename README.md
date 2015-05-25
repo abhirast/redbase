@@ -1,3 +1,85 @@
+# ql_DOC #
+
+#### Overview ####
+This part provides the core database functionality to redbase. Internally, the Query Language (QL) module takes in the inputs from the command line parser and interacts with the other modules - PF, RM, IX and SM to execute the tasks demanded by the user. Planning the execution of a general database query in the most efficient way is quite challenging. In this implementation, many simplifications have been made to restrict the search space of the possible query execution plans.
+
+#### Code structure ####
+An iterator approach has been used in this implementation. Various atomic operators have been defined corresponding to the various simple database operations. These operators belong to a class hierarchy. The base operator class is QL_Op, which is an abstract class which provides a common interface to all the operators. Each operator has 4 functions- (i) Open, (ii) Next, (iii) Reset and (iv) Close. Each operator also stores the schema of its output, which includes the relation name, attribute name, attribute offsets, attribute lengths and index number of each attribute. These operators are then chained together in a tree like fashion as described below.
+
+The operators are broadly divided into two categories - (a) Unary operators and (b) Binary operators. The unary operators take the input from a single operator or none of the operators (file scan operators) whereas the binary operators take input from two other operators and combine them to produce their output. There are two separate abstract classes- QL_UnaryOp and QL_BinaryOp, extending the QL_Op base class to make this distinction. This abstraction is very convenient because the functionality can be easily extended by defining more operators which implement one of these classes.
+
+The unary operators store a pointer to its child, which can be null in case of leaf nodes and the binary operators store a pointer for each of its two children. Each operator also stores a pointer to its parent node (null in case of root). The parent pointer makes the tree transformations very convenient. In the current implementation, five unary operators corresponding to (i) Condition checking, (ii) Projection, (iii) File Scan (iv) Index Scan (v) Permutation/Duplication of attributes have been implemented. One binary operator for Cross product has also been implemented.
+
+#### Initial Query Plan ####
+If we have N relations in our query, there are N! possible orderings of them. Besides the presence of selection and projection conditions make the search space really large. In this implementation, no attempt has been made to reorder the relations. Consider a general select query-
+
+select A1, A2 ... Am from R1, R2, ... Rn where C1, C2, ... Ck;
+
+where A1, A2 etc are the various attributes, R1, R2 etc are different relations and C1, C2 etc are the conditions involving attributes or constants in any of the given relations. After checking the validity of the query which includes validating the names of each input, checking for ambiguous attribute names, type consistency etc, a simple query tree is designed. This tree consists of a left leaning binary tree having file scan operators, one for each relation at its leaf and cross product operator at each non-leaf node. Then one operator corresponding to each condition is added above the root. After that, if the query doesn't have "*" in the select clause then a projection operator is placed above the new root, which projects the given attributes from the giant cross product of the relations. Further, if the attributes in the select clause differ from the natural ordering imposed by the relations in the from clause and the attributes within these relations, then a permutation operator is defined above the root. This operator also identifies the duplicates in the select clause and hence duplicates the attributes appropriately.
+
+Let us take a simple example to visualize this. Let R(a,b,c), S(b,c,d) and T(c,d,e) be three relations. The attribute e of T is indexed. Consider the query - 
+
+select T.e, S.b, S.d from R, S, T where R.b = S.b and R.c = 1 and T.e = 3;
+
+The initial query plan is as follows-
+
+PERMUTE/DUPLICATE ATTRIBUTES
+PROJECT S.b, S.d, T.e
+FILTER BY T.e =AttrType: INT *(int *)data=3
+FILTER BY R.c =AttrType: INT *(int *)data=1
+FILTER BY R.b =S.b
+CROSS PROD { 
+  CROSS PROD { 
+    FILE SCAN R
+    ,
+    FILE SCAN S
+   } 
+  ,
+  FILE SCAN T
+ }
+
+#### Query optimization ####
+In the restricted optimization done in this implementation, the structure formed by the leaf nodes and the binary operators is never changed. The unary condition and projection nodes are pushed down the tree as much as possible. Pushing down condition operators gives us a large efficiency gain by rejecting invalid tuples early. Pushing down projection operator reduces the amount of data flowing between nodes and improves performance. Two separate recursive functions have been implemented for pushing down conditions and projection respectively. These functions are called with root of the binary tree as input and they recursively modify the whole tree. 
+
+At first we push down conditions because some conditions can merge with the file scans to produce index scans. If we push down projections first then they might project out the indexed attributes and thus prevent us from doing index scans. 
+
+##### Pushing Down Conditions #####
+This function is called on the root once. When called on a node, this function calls itself on the child(ren) of the node. Then it operates on the current node only if the node is a condition node. Since conditions are pushed down first, the child of the current node can only be a File Scan node, Index Scan node, Cross Product Node or another Condition node. In this implementation, we are doing index scans only based on equality condition because we don't have the distribution of values in each relation. So, if the child is an Index Scan node then nothing is done. Other three cases are dealt as follows-
+
+(i) Child is File Scan - If the condition is an equality condition having a value as its RHS then the condition is merged with the file scan to produce an Index Scan.
+(ii) Child is another Condition node - Since conditions are commutative, child is swapped with the current node and the function is called again on the current node. This allows conditions to 'pass through' other conditions and hence guarantees each condition will reach as low as possible.
+(iii) Child is a Cross product node - If the RHS of the condition is a value then the condition node is pushed towards the appropriate child containing the LHS attribute. If the RHS is another attribute then the condition is pushed only if both the attributes belong to the same child. If it doesn't then the condition is not moved. The function is again called on the condition after it got pushed down.
+
+The result of this optimization on the above mentioned query is as follows - 
+
+PERMUTE/DUPLICATE ATTRIBUTES
+PROJECT S.b, S.d, T.e
+CROSS PROD { 
+  FILTER BY R.b =S.b
+  CROSS PROD { 
+    FILTER BY R.c = 1
+    FILE SCAN R
+    ,
+    FILE SCAN S
+   } 
+  ,
+  INDEX SCAN T ON e
+ }
+
+##### Pushing Down Projections #####
+This function has similar calling architecture as condition pushing function. It is also recursive and is called on the root node. The projection node is more dynamic than the condition node in nature because it results in creation of new nodes in the operator tree. Lets examine the different cases. 
+
+If the function is called on a node which is not a Projection node then it calls it on its child(ren) and returns. If the node is a projection node then different actions are taken based on the type of its child. The child of a Projection Node on which the call has been made can't be another Projection node. It also can't be a Permute/Duplicate node because pushes are only done downwards. If the child is File Scan or Index Scan then nothing is done because it gives no gain in efficiency. The other two cases are-
+
+(i) Child is Condition node - If the current node is a condition node then 
+
+
+
+Extra functionality - Type coercion 
+ 
+
+
+
 # sm_DOC #
 
 #### Overview ####
