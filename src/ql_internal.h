@@ -137,9 +137,12 @@ private:
 /////////////////////////////////////////////////////
 
 class QL_Projection: public QL_UnaryOp {
+	friend class QL_Optimizer;
 public:
 	QL_Projection(QL_Op &child, int nSelAttrs, const RelAttr* selAttrs,
 		const std::vector<DataAttrInfo> &attributes);
+	QL_Projection(QL_Op &child, const std::vector<DataAttrInfo> &input_att,
+			const std::vector<DataAttrInfo> &output_att);
 	~QL_Projection();
 	RC Open();
 	RC Next(std::vector<char> &rec);
@@ -205,7 +208,8 @@ private:
 		bool pushRight);
 	static bool attrGoesRight(const char* relName, const char* attrName, 
 											QL_BinaryOp *op);
-	static void pushProjIntoCond(QL_Projection* proj, QL_Condition* cond);
+	static bool compatibleProjCond(QL_Projection* proj, QL_Condition* cond,
+		std::vector<const RelAttr*> &tokeep);
 };
 
 

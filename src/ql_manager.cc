@@ -161,14 +161,14 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         Optimize the query plan
     *************************************/
     QL_Op* root = opTree.back();
-        // print the result
+    // print the result
     if (bQueryPlans) {
         printPlanHeader("SELECT", " ");
         printOperatorTree(root, 0);
         printPlanFooter();
     }
     QL_Optimizer::pushCondition(root);
-    
+    QL_Optimizer::pushProjection(root);
     // print the result
     if (bQueryPlans) {
         printPlanHeader("SELECT", " ");

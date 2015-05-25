@@ -319,6 +319,44 @@ QL_Projection::QL_Projection(QL_Op &child, int nSelAttrs,
 	}
 }
 
+QL_Projection::QL_Projection(QL_Op &child, 
+			const vector<DataAttrInfo> &input_att,
+			const vector<DataAttrInfo> &output_att) {
+	this->inputAttr = input_att;
+	this->attributes = output_att;
+	for (unsigned int i = 0; i < output_att.size(); i++) {
+		const DataAttrInfo* dtr = &output_att[i];
+		int idx = QL_Manager::findAttr(dtr->relName, dtr->attrName, 
+		input_att);
+		this->position.push_back((unsigned int) idx);
+	}
+	this->child = &child;
+	this->parent = 0;
+	child.parent = this;
+	isOpen = false;
+	// modify the offsets of the output schema
+	int cum = 0;
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].offset = cum;
+		cum += this->attributes[i].attrLength;
+	}
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < this->attributes.size(); i++) {
+		this->attributes[i].indexNo = -1;
+	}
+	opType = PROJ;
+	desc << "PROJECT ";
+	if (this->attributes[0].relName != 0) {
+		desc << this->attributes[0].relName << ".";
+	}
+	desc << (this->attributes[0].attrName);
+	for (unsigned int i = 1; i < this->attributes.size(); i++) {
+		desc << ", ";
+		desc << this->attributes[i].relName << ".";
+		desc << this->attributes[i].attrName;
+	}
+}
+
 QL_Projection::~QL_Projection() {
 	if (child != 0) delete child;
 }
@@ -603,23 +641,86 @@ void QL_Optimizer::pushProjection(QL_Op* &root) {
 	auto proj = (QL_Projection*) root;
 	if (proj->child->opType == COND) {
 		auto down = (QL_Condition*) proj->child;
-		const RelAttr* lhs = &down->cond->lhsAttr;
-		if(QL_Manager::findAttr(lhs->relName, lhs->attrName, 
-						proj->attributes) < 0) {
-			pushProjection(proj->child);
-			return;
-		}
-		if (down->cond->bRhsIsAttr) {
-			const RelAttr* rhs = &down->cond->rhsAttr;
-			if(QL_Manager::findAttr(rhs->relName, rhs->attrName, 
-						proj->attributes) < 0) {
-				pushProjection(proj->child);
-				return;
+		vector<const RelAttr*> tokeep;
+		bool compatible = compatibleProjCond(proj, down, tokeep);
+		if (compatible) {
+			// swap the projection and condition
+			down->attributes = proj->attributes;
+			swapUnUnOpPointers(proj, down);
+			root = down;
+			pushProjection(down->child);
+			// free the memory
+			for (unsigned int i = 0; i < tokeep.size(); i++) {
+				delete tokeep[i];
 			}
+		}
+		else {
+			// define a new projection
+			RelAttr* attrs = new RelAttr[tokeep.size()];
+			for (unsigned int i = 0; i < tokeep.size();i++) {
+				attrs[i] = *tokeep[i];
+			}
+			QL_Op* newproj = new QL_Projection(*down->child, 
+				(int) tokeep.size(), attrs, down->child->attributes);
+			down->child = newproj;
+			down->attributes = newproj->attributes;
+			newproj->parent = down;
+			// change the attributes of old projection
+			proj->inputAttr = down->attributes;
+			proj->position.clear();
+			for (unsigned int i = 0; i < proj->attributes.size(); i++) {
+				DataAttrInfo* dtr = &proj->attributes[i];
+				int idx = QL_Manager::findAttr(dtr->relName, dtr->attrName, 
+					proj->inputAttr);
+				proj->position.push_back((unsigned int) idx);
+			}
+			delete[] attrs;
+			pushProjection(newproj);
 		}
 	}
 	else if (proj->child->opType == REL_CROSS) {
-
+		// split the projection operator into two disjoint operators
+		auto down = (QL_BinaryOp*) proj->child;
+		// establish links between parent and child of proj
+		down->parent = proj->parent;
+		if (proj->parent) {
+			if (proj->parent->opType >= 0) {
+				auto up = (QL_UnaryOp*) proj->parent;
+				up->child = down;
+			} else {
+				auto up = (QL_BinaryOp*) proj->parent;
+				if (up->lchild == proj) up->lchild = down;
+				else up->rchild = down;
+			}
+		}
+		// now define new projection operators
+		auto down_left = (QL_Op*) down->lchild;
+		auto down_right = (QL_Op*) down->rchild;
+		// make separate output schema
+		vector<DataAttrInfo> l_schema;
+		vector<DataAttrInfo> r_schema;
+		for (unsigned int i = 0; i < proj->attributes.size(); i++) {
+			DataAttrInfo* dtr = &proj->attributes[i];
+			int idx = QL_Manager::findAttr(dtr->relName, dtr->attrName, 
+			down_right->attributes);
+			if (idx >= 0) r_schema.push_back(*dtr);
+			else l_schema.push_back(*dtr);
+		}
+		QL_Op* l_proj = new QL_Projection(*down_left, down_left->attributes,
+										 l_schema);
+		QL_Op* r_proj = new QL_Projection(*down_right, down_right->attributes,
+										 r_schema);
+		// establish links between down and new projections
+		down->lchild = l_proj;
+		down->rchild = r_proj;
+		l_proj->parent = down;
+		r_proj->parent = down;
+		proj->child = 0;
+		root = down;
+		delete proj;
+		// push down the newly defined operators
+		pushProjection(down->lchild);
+		pushProjection(down->rchild);
 	}
 	else {
 		return;
@@ -680,9 +781,8 @@ bool QL_Optimizer::attrGoesRight(const char *relName, const char *attrName,
 }
 
 // pushes a projection through a condition
-void QL_Optimizer::pushProjIntoCond(QL_Projection* proj, 
-											QL_Condition* cond) {
-	vector<const RelAttr*> tokeep;
+bool QL_Optimizer::compatibleProjCond(QL_Projection* proj, QL_Condition* cond,
+	vector<const RelAttr*> &tokeep) {
 	for (unsigned int i = 0; i < proj->attributes.size(); i++) {
 		RelAttr* attr = new RelAttr();
 		attr->relName = proj->attributes[i].relName;
@@ -710,10 +810,7 @@ void QL_Optimizer::pushProjIntoCond(QL_Projection* proj,
 		}
 	}
 
-	if (compatible) {
-
-	}
-
+	return compatible;
 }
 
 
@@ -724,7 +821,7 @@ void QL_Optimizer::pushProjIntoCond(QL_Projection* proj,
 void printOperatorTree(QL_Op* root, int tabs) {
 	if (root == 0) return;
 	for (int i = 0; i < tabs; i++) cout<<"  ";
-	if (root->opType > 0) {
+	if (root->opType >= 0) {
 		// unary operator
 		auto temp = (QL_UnaryOp*) root;
 		cout << root->desc.str() << endl;
