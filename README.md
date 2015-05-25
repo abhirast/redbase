@@ -12,17 +12,17 @@ The unary operators store a pointer to its child, which can be null in case of l
 
 #### Initial Query Plan ####
 If we have N relations in our query, there are N! possible orderings of them. Besides the presence of selection and projection conditions make the search space really large. In this implementation, no attempt has been made to reorder the relations. Consider a general select query-
-
+~~~~
 select A1, A2 ... Am from R1, R2, ... Rn where C1, C2, ... Ck;
-
+~~~~
 where A1, A2 etc are the various attributes, R1, R2 etc are different relations and C1, C2 etc are the conditions involving attributes or constants in any of the given relations. After checking the validity of the query which includes validating the names of each input, checking for ambiguous attribute names, type consistency etc, a simple query tree is designed. This tree consists of a left leaning binary tree having file scan operators, one for each relation at its leaf and cross product operator at each non-leaf node. Then one operator corresponding to each condition is added above the root. After that, if the query doesn't have "*" in the select clause then a projection operator is placed above the new root, which projects the given attributes from the giant cross product of the relations. Further, if the attributes in the select clause differ from the natural ordering imposed by the relations in the from clause and the attributes within these relations, then a permutation operator is defined above the root. This operator also identifies the duplicates in the select clause and hence duplicates the attributes appropriately.
 
 Let us take a simple example to visualize this. Let R(a,b,c), S(b,c,d) and T(c,d,e) be three relations. The attribute e of T is indexed. Consider the query - 
-
+~~~~
 select T.e, S.b, S.d from R, S, T where R.b = S.b and R.c = 1 and T.e = 3;
-
+~~~~
 The initial query plan is as follows-
-
+~~~~
 PERMUTE/DUPLICATE ATTRIBUTES
 PROJECT S.b, S.d, T.e
 FILTER BY T.e =AttrType: INT *(int *)data=3
@@ -37,7 +37,7 @@ CROSS PROD {
   ,
   FILE SCAN T
  }
-
+~~~~
 #### Query optimization ####
 In the restricted optimization done in this implementation, the structure formed by the leaf nodes and the binary operators is never changed. The unary condition and projection nodes are pushed down the tree as much as possible. Pushing down condition operators gives us a large efficiency gain by rejecting invalid tuples early. Pushing down projection operator reduces the amount of data flowing between nodes and improves performance. Two separate recursive functions have been implemented for pushing down conditions and projection respectively. These functions are called with root of the binary tree as input and they recursively modify the whole tree. 
 
@@ -51,7 +51,7 @@ This function is called on the root once. When called on a node, this function c
 (iii) Child is a Cross product node - If the RHS of the condition is a value then the condition node is pushed towards the appropriate child containing the LHS attribute. If the RHS is another attribute then the condition is pushed only if both the attributes belong to the same child. If it doesn't then the condition is not moved. The function is again called on the condition after it got pushed down.
 
 The result of this optimization on the above mentioned query is as follows - 
-
+~~~~
 PERMUTE/DUPLICATE ATTRIBUTES
 PROJECT S.b, S.d, T.e
 CROSS PROD { 
@@ -65,7 +65,7 @@ CROSS PROD {
   ,
   INDEX SCAN T ON e
  }
-
+~~~~
 ##### Pushing Down Projections #####
 This function has similar calling architecture as condition pushing function. It is also recursive and is called on the root node. The projection node is more dynamic than the condition node in nature because it results in creation of new nodes in the operator tree. Lets examine the different cases. 
 
@@ -76,7 +76,7 @@ If the function is called on a node which is not a Projection node then it calls
 (ii) Child is Cross Product node - In this case the projection operator splits up. The attributes are partitioned into two parts - one belonging to the right child and other belonging to the left child. Two cases arise (a) If both these partitions are non-empty then the two new projection operators are defined and they are pushed down the two children of the Cross Product node and the original Projection operator is deleted. The function is called again on the newly created Projection operators. (b) If one of the partitions is empty then a new Projection node is created and pushed down the child corresponding to the non-empty partition. The original Projection operator is not created. Ideally, this operation should have created an empty projection operator on the other child, which just throws empty tuples. But the current implementation doesn't support empty tuples and hence it has been avoided. It might not require much work to incorporate it but it has been left for now to deal with more interesting issues.
 
 The result of this optimization on the above mentioned query is as follows - 
-
+~~~~
 PERMUTE/DUPLICATE ATTRIBUTES
 CROSS PROD { 
   PROJECT S.b, S.d
@@ -94,7 +94,7 @@ CROSS PROD {
   PROJECT T.e
   INDEX SCAN T ON e
  }
-
+~~~~
 
 #### Query Execution ####
 After all this hard work, query execution is just a matter of calling Open, Next and Close on the root node. The resulting tuples are printed using the Printer class.
