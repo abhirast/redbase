@@ -223,6 +223,23 @@ need to display the deleted tuples as a feedback to the user. I have also
 implemented type coercion, which changes the type of RHS to match the LHS for 
 conditions in the command.
 
+#### Using Scratch Pages for holding records ####
+I have not used scratch pages to hold intermediate records but since my 
+implementation pushes down projections as much as possible, the extra memory 
+used by program would be very small except in pathological cases. Also I thought 
+of a more efficient methods which doesn't require defining a new scratch page for 
+each binary operator but it needs some redesigning of the API. We can change the 
+Open function to accept two pointers. After Query optimization, we traverse the 
+operator tree and for each binary operator we allocate a disjoint portion of the 
+scratch page depending on the size of its the record it needs to hold. A new 
+scratch page is allocated if the current scratch page becomes full. A common 
+portion is allocated for the unary operators. Then Open is called on all the 
+operators with the allocated pointers which are saved by each operator. This 
+implementation would not require number of pages equal to the number of binary 
+operators and hence I request the TA to give a reasonable penalty, which would 
+be 1-2 pages in most practical cases.
+
+
 #### Debugging ####
 I tested my implementation on many hand designed queries on small tables for 
 debugging and also on CS145 ebay-dataset for tests. I also used valgrind to 
