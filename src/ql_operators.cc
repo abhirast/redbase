@@ -435,7 +435,7 @@ QL_PermDup::QL_PermDup(QL_Op &child, int nSelAttrs,
 		this->attributes[i].indexNo = -1;
 	}
 	opType = PERM_DUP;
-	desc << "PERMUTE/DUPLICTE ATTRIBUTES";
+	desc << "PERMUTE/DUPLICATE ATTRIBUTES";
 }
 
 QL_PermDup::~QL_PermDup() {
@@ -567,7 +567,7 @@ RC QL_Cross::Close() {
 /////////////////////////////////////////////////////
 void QL_Optimizer::pushCondition(QL_Op* &root) {
 	if (!root) return;
-	if (root->opType > 0) {
+	if (root->opType >= 0) {
 		auto temp = (QL_UnaryOp*) root;
 		pushCondition(temp->child);
 	}
@@ -628,7 +628,7 @@ void QL_Optimizer::pushCondition(QL_Op* &root) {
 
 void QL_Optimizer::pushProjection(QL_Op* &root) {
 	if (!root) return;
-	if (root->opType > 0) {
+	if (root->opType >= 0) {
 		auto temp = (QL_UnaryOp*) root;
 		pushProjection(temp->child);
 	}
@@ -681,19 +681,7 @@ void QL_Optimizer::pushProjection(QL_Op* &root) {
 	else if (proj->child->opType == REL_CROSS) {
 		// split the projection operator into two disjoint operators
 		auto down = (QL_BinaryOp*) proj->child;
-		// establish links between parent and child of proj
-		down->parent = proj->parent;
-		if (proj->parent) {
-			if (proj->parent->opType >= 0) {
-				auto up = (QL_UnaryOp*) proj->parent;
-				up->child = down;
-			} else {
-				auto up = (QL_BinaryOp*) proj->parent;
-				if (up->lchild == proj) up->lchild = down;
-				else up->rchild = down;
-			}
-		}
-		// now define new projection operators
+		// define new projection operators
 		auto down_left = (QL_Op*) down->lchild;
 		auto down_right = (QL_Op*) down->rchild;
 		// make separate output schema
@@ -706,19 +694,37 @@ void QL_Optimizer::pushProjection(QL_Op* &root) {
 			if (idx >= 0) r_schema.push_back(*dtr);
 			else l_schema.push_back(*dtr);
 		}
-		QL_Op* l_proj = new QL_Projection(*down_left, down_left->attributes,
-										 l_schema);
-		QL_Op* r_proj = new QL_Projection(*down_right, down_right->attributes,
-										 r_schema);
 		// establish links between down and new projections
-		down->lchild = l_proj;
-		down->rchild = r_proj;
-		l_proj->parent = down;
-		r_proj->parent = down;
-		proj->child = 0;
-		root = down;
-		delete proj;
-		// push down the newly defined operators
+		if (l_schema.size() > 0) {
+			QL_Op* l_proj = new QL_Projection(*down_left, 
+					down_left->attributes, l_schema);
+			down->lchild = l_proj;
+			l_proj->parent = down;
+		}
+		if (r_schema.size() > 0) {
+			QL_Op* r_proj = new QL_Projection(*down_right, 
+					down_right->attributes, r_schema);
+			down->rchild = r_proj;
+			r_proj->parent = down;
+		}
+
+		// establish links between parent and child of proj
+		if (l_schema.size() > 0 && r_schema.size() > 0) {
+			down->parent = proj->parent;
+			if (proj->parent) {
+				if (proj->parent->opType >= 0) {
+					auto up = (QL_UnaryOp*) proj->parent;
+					up->child = down;
+				} else {
+					auto up = (QL_BinaryOp*) proj->parent;
+					if (up->lchild == proj) up->lchild = down;
+					else up->rchild = down;
+				}
+			}
+			proj->child = 0;
+			root = down;
+			delete proj;
+		} 
 		pushProjection(down->lchild);
 		pushProjection(down->rchild);
 	}
