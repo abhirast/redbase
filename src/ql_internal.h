@@ -209,7 +209,7 @@ private:
 	static bool attrGoesRight(const char* relName, const char* attrName, 
 											QL_BinaryOp *op);
 	static bool compatibleProjCond(QL_Projection* proj, QL_Condition* cond,
-		std::vector<const RelAttr*> &tokeep);
+		QL_Op* &newproj);
 };
 
 

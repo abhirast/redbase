@@ -641,27 +641,17 @@ void QL_Optimizer::pushProjection(QL_Op* &root) {
 	auto proj = (QL_Projection*) root;
 	if (proj->child->opType == COND) {
 		auto down = (QL_Condition*) proj->child;
-		vector<const RelAttr*> tokeep;
-		bool compatible = compatibleProjCond(proj, down, tokeep);
+		QL_Op* newproj;
+		bool compatible = compatibleProjCond(proj, down, newproj);
 		if (compatible) {
 			// swap the projection and condition
 			down->attributes = proj->attributes;
 			swapUnUnOpPointers(proj, down);
 			root = down;
 			pushProjection(down->child);
-			// free the memory
-			for (unsigned int i = 0; i < tokeep.size(); i++) {
-				delete tokeep[i];
-			}
 		}
 		else {
 			// define a new projection
-			RelAttr* attrs = new RelAttr[tokeep.size()];
-			for (unsigned int i = 0; i < tokeep.size();i++) {
-				attrs[i] = *tokeep[i];
-			}
-			QL_Op* newproj = new QL_Projection(*down->child, 
-				(int) tokeep.size(), attrs, down->child->attributes);
 			down->child = newproj;
 			down->attributes = newproj->attributes;
 			newproj->parent = down;
@@ -674,7 +664,6 @@ void QL_Optimizer::pushProjection(QL_Op* &root) {
 					proj->inputAttr);
 				proj->position.push_back((unsigned int) idx);
 			}
-			delete[] attrs;
 			pushProjection(newproj);
 		}
 	}
@@ -788,20 +777,17 @@ bool QL_Optimizer::attrGoesRight(const char *relName, const char *attrName,
 
 // pushes a projection through a condition
 bool QL_Optimizer::compatibleProjCond(QL_Projection* proj, QL_Condition* cond,
-	vector<const RelAttr*> &tokeep) {
-	for (unsigned int i = 0; i < proj->attributes.size(); i++) {
-		RelAttr* attr = new RelAttr();
-		attr->relName = proj->attributes[i].relName;
-		attr->attrName = proj->attributes[i].attrName;
-		tokeep.push_back(attr);
-	}
+	QL_Op* &newproj) {
+	
 	// check compatibility with condition
-	bool compatible = true;
+	bool hasLeft = true, hasRight = true;
+	int left = 0, right = 0;
 	const RelAttr *lhs = &cond->cond->lhsAttr;
 	if (QL_Manager::findAttr(lhs->relName, lhs->attrName, 
 					proj->attributes) < 0) {
-		tokeep.push_back(lhs);
-		compatible = false;
+		hasLeft = false;
+		left = QL_Manager::findAttr(lhs->relName, lhs->attrName, 
+					cond->attributes);
 	}
 	if (cond->cond->bRhsIsAttr) {
 		const RelAttr *rhs = &cond->cond->rhsAttr;
@@ -810,13 +796,27 @@ bool QL_Optimizer::compatibleProjCond(QL_Projection* proj, QL_Condition* cond,
 			if (!(strcmp(lhs->attrName, rhs->attrName) == 0 &&
             	(lhs->relName == 0 || rhs->relName == 0 ||
                 strcmp(lhs->relName, rhs->relName) == 0))) {
-            	tokeep.push_back(rhs);
-            	compatible = false;
+            	hasRight = false;
+            	right = QL_Manager::findAttr(rhs->relName, rhs->attrName, 
+						cond->attributes);
         	}
 		}
 	}
+	if (!(hasLeft && hasRight)) {
+		vector<DataAttrInfo> attrs = cond->attributes;
+		vector<DataAttrInfo> tokeep = proj->attributes;
+		vector<DataAttrInfo> newattr;
+		if (!hasLeft) tokeep.push_back(attrs[left]);
+		if (!hasRight) tokeep.push_back(attrs[right]);
+		for (unsigned int i = 0; i < attrs.size(); i++) {
+			int has = QL_Manager::findAttr(attrs[i].relName, 
+				attrs[i].attrName, tokeep);
+			if (has >= 0) newattr.push_back(attrs[i]);
+		}
+		newproj = new QL_Projection(*cond->child, attrs, newattr);
+	}
 
-	return compatible;
+	return hasLeft && hasRight;
 }
 
 
