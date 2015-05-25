@@ -214,6 +214,7 @@ QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes) {
 	this->attributes = attributes;
 	this->child = &child;
+	this->parent = 0;
 	child.parent = this;
 	this->cond = cond;
 	isOpen = false;
@@ -279,6 +280,7 @@ QL_Projection::QL_Projection(QL_Op &child, int nSelAttrs,
 	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
 	this->inputAttr = attributes;
 	this->child = &child;
+	this->parent = 0;
 	child.parent = this;
 	isOpen = false;
 	// construct the output schema, loop through input attrs to see which
@@ -322,7 +324,7 @@ QL_Projection::~QL_Projection() {
 }
 
 RC QL_Projection::Open() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PROJ_WARN, ERR = QL_PROJ_ERR;
 	if (isOpen) return WARN;
 	QL_ErrorForward(child->Open());
 	isOpen = true;
@@ -330,7 +332,7 @@ RC QL_Projection::Open() {
 }
 
 RC QL_Projection::Next(vector<char> &rec) {
-	RC WARN = QL_EOF, ERR = QL_COND_ERR;
+	RC WARN = QL_EOF, ERR = QL_PROJ_ERR;
 	if (!isOpen) return WARN;
 	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	vector<char> temp(inputAttr.back().offset + inputAttr.back().attrLength);
@@ -346,14 +348,14 @@ RC QL_Projection::Next(vector<char> &rec) {
 }
 
 RC QL_Projection::Reset() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PROJ_WARN, ERR = QL_PROJ_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(child->Reset());
 	return OK_RC;
 }
 
 RC QL_Projection::Close() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PROJ_WARN, ERR = QL_PROJ_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(child->Close());
 	isOpen = false;
@@ -368,6 +370,7 @@ QL_PermDup::QL_PermDup(QL_Op &child, int nSelAttrs,
 	const RelAttr* selAttrs, const vector<DataAttrInfo> &attributes) {
 	this->inputAttr = attributes;
 	this->child = &child;
+	this->parent = 0;
 	child.parent = this;
 	isOpen = false;
 	// construct the output schema, loop through input attrs to see which
@@ -402,7 +405,7 @@ QL_PermDup::~QL_PermDup() {
 }
 
 RC QL_PermDup::Open() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PERMDUP_WARN, ERR = QL_PERMDUP_ERR;
 	if (isOpen) return WARN;
 	QL_ErrorForward(child->Open());
 	isOpen = true;
@@ -410,7 +413,7 @@ RC QL_PermDup::Open() {
 }
 
 RC QL_PermDup::Next(vector<char> &rec) {
-	RC WARN = QL_EOF, ERR = QL_COND_ERR;
+	RC WARN = QL_EOF, ERR = QL_PERMDUP_ERR;
 	if (!isOpen) return WARN;
 	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
 	vector<char> temp(inputAttr.back().offset + inputAttr.back().attrLength);
@@ -426,14 +429,14 @@ RC QL_PermDup::Next(vector<char> &rec) {
 }
 
 RC QL_PermDup::Reset() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PERMDUP_WARN, ERR = QL_PERMDUP_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(child->Reset());
 	return OK_RC;
 }
 
 RC QL_PermDup::Close() {
-	RC WARN = QL_COND_WARN, ERR = QL_COND_ERR;
+	RC WARN = QL_PERMDUP_WARN, ERR = QL_PERMDUP_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(child->Close());
 	isOpen = false;
@@ -447,6 +450,7 @@ RC QL_PermDup::Close() {
 QL_Cross::QL_Cross(QL_Op &left, QL_Op &right) {
 	this->lchild = &left;
 	this->rchild = &right;
+	this->parent = 0;
 	left.parent = this;
 	right.parent = this;
 	isOpen = false;
@@ -566,7 +570,10 @@ void QL_Optimizer::pushCondition(QL_Op* &root) {
 		if (cond->cond->bRhsIsAttr) {
 			const RelAttr* rhs = &cond->cond->rhsAttr;
 			bool rhsGoRight = attrGoesRight(rhs->relName, rhs->attrName, down);
-			if (goRight != rhsGoRight) return;
+			if (goRight != rhsGoRight) {
+				pushCondition(cond->child);
+				return;
+			}
 		}
 		// push the condition
 		swapUnBinOpPointers(cond, down, goRight);
@@ -582,8 +589,41 @@ void QL_Optimizer::pushCondition(QL_Op* &root) {
 }
 
 void QL_Optimizer::pushProjection(QL_Op* &root) {
-	if (!root || root->opType != PROJ) return;
-	
+	if (!root) return;
+	if (root->opType > 0) {
+		auto temp = (QL_UnaryOp*) root;
+		pushProjection(temp->child);
+	}
+	if (root->opType < 0) {
+		auto temp = (QL_BinaryOp*) root;
+		pushProjection(temp->lchild);
+		pushProjection(temp->rchild);
+	}
+	if (root->opType != PROJ) return;
+	auto proj = (QL_Projection*) root;
+	if (proj->child->opType == COND) {
+		auto down = (QL_Condition*) proj->child;
+		const RelAttr* lhs = &down->cond->lhsAttr;
+		if(QL_Manager::findAttr(lhs->relName, lhs->attrName, 
+						proj->attributes) < 0) {
+			pushProjection(proj->child);
+			return;
+		}
+		if (down->cond->bRhsIsAttr) {
+			const RelAttr* rhs = &down->cond->rhsAttr;
+			if(QL_Manager::findAttr(rhs->relName, rhs->attrName, 
+						proj->attributes) < 0) {
+				pushProjection(proj->child);
+				return;
+			}
+		}
+	}
+	else if (proj->child->opType == REL_CROSS) {
+
+	}
+	else {
+		return;
+	}
 }
 
 void QL_Optimizer::swapUnUnOpPointers(QL_UnaryOp* up, QL_UnaryOp* down) {
@@ -638,6 +678,44 @@ bool QL_Optimizer::attrGoesRight(const char *relName, const char *attrName,
 					op->rchild->attributes) >= 0) return true;
 	return false;
 }
+
+// pushes a projection through a condition
+void QL_Optimizer::pushProjIntoCond(QL_Projection* proj, 
+											QL_Condition* cond) {
+	vector<const RelAttr*> tokeep;
+	for (unsigned int i = 0; i < proj->attributes.size(); i++) {
+		RelAttr* attr = new RelAttr();
+		attr->relName = proj->attributes[i].relName;
+		attr->attrName = proj->attributes[i].attrName;
+		tokeep.push_back(attr);
+	}
+	// check compatibility with condition
+	bool compatible = true;
+	const RelAttr *lhs = &cond->cond->lhsAttr;
+	if (QL_Manager::findAttr(lhs->relName, lhs->attrName, 
+					proj->attributes) < 0) {
+		tokeep.push_back(lhs);
+		compatible = false;
+	}
+	if (cond->cond->bRhsIsAttr) {
+		const RelAttr *rhs = &cond->cond->rhsAttr;
+		if (QL_Manager::findAttr(rhs->relName, rhs->attrName, 
+						proj->attributes) < 0) {
+			if (!(strcmp(lhs->attrName, rhs->attrName) == 0 &&
+            	(lhs->relName == 0 || rhs->relName == 0 ||
+                strcmp(lhs->relName, rhs->relName) == 0))) {
+            	tokeep.push_back(rhs);
+            	compatible = false;
+        	}
+		}
+	}
+
+	if (compatible) {
+
+	}
+
+}
+
 
 /////////////////////////////////////////////////////
 // Print Operator Tree

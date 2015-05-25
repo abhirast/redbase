@@ -161,6 +161,12 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         Optimize the query plan
     *************************************/
     QL_Op* root = opTree.back();
+        // print the result
+    if (bQueryPlans) {
+        printPlanHeader("SELECT", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
     QL_Optimizer::pushCondition(root);
     
     // print the result
@@ -554,17 +560,6 @@ RC QL_Manager::Update(const char *relName,
         SM_ErrorForward(ixm->CloseIndex(update_indh));
     }
     return OK_RC;
-}
-
-//
-// void QL_PrintError(RC rc)
-//
-// This function will accept an Error code and output the appropriate
-// error.
-//
-void QL_PrintError(RC rc)
-{
-    cout << "QL_PrintError\n   rc=" << rc << "\n";
 }
 
 

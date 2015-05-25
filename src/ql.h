@@ -96,27 +96,31 @@ void QL_PrintError(RC rc);
 
 // Error codes
 
-#define QL_INSERT_WARN                400
-#define QL_CAT_WARN                   401
-#define QL_INVALID_WARN               402
-#define QL_DELETE_WARN                403
-#define QL_FILESCAN_WARN              404
-#define QL_EOF                        405
-#define QL_IXSCAN_WARN                406
-#define QL_UPDATE_WARN                407
-#define QL_COND_WARN                  408
-#define QL_SELECT_WARN                409
-#define QL_CROSS_WARN                 410
+#define QL_INSERT_WARN                (START_QL_WARN + 0)
+#define QL_CAT_WARN                   (START_QL_WARN + 1)
+#define QL_INVALID_WARN               (START_QL_WARN + 2)
+#define QL_DELETE_WARN                (START_QL_WARN + 3)
+#define QL_FILESCAN_WARN              (START_QL_WARN + 4)
+#define QL_EOF                        (START_QL_WARN + 5)
+#define QL_IXSCAN_WARN                (START_QL_WARN + 6)
+#define QL_UPDATE_WARN                (START_QL_WARN + 7)
+#define QL_COND_WARN                  (START_QL_WARN + 8)
+#define QL_SELECT_WARN                (START_QL_WARN + 9)
+#define QL_CROSS_WARN                 (START_QL_WARN + 10)
+#define QL_PROJ_WARN                  (START_QL_WARN + 11)
+#define QL_PERMDUP_WARN               (START_QL_WARN + 12)
+#define QL_LASTWARN                    QL_PERMDUP_WARN
 
-
-
-#define QL_INSERT_ERR                -400
-#define QL_DELETE_ERR                -401
-#define QL_FILESCAN_ERR              -402
-#define QL_IXSCAN_ERR                -403
-#define QL_UPDATE_ERR                -404
-#define QL_COND_ERR                  -405
-#define QL_SELECT_ERR                -406
-#define QL_CROSS_ERR                 -407
+#define QL_INSERT_ERR                (START_QL_ERR - 0)
+#define QL_DELETE_ERR                (START_QL_ERR - 1)
+#define QL_FILESCAN_ERR              (START_QL_ERR - 2)
+#define QL_IXSCAN_ERR                (START_QL_ERR - 3)
+#define QL_UPDATE_ERR                (START_QL_ERR - 4)
+#define QL_COND_ERR                  (START_QL_ERR - 5)
+#define QL_SELECT_ERR                (START_QL_ERR - 6)
+#define QL_CROSS_ERR                 (START_QL_ERR - 7)
+#define QL_PROJ_ERR                  (START_QL_ERR - 8)
+#define QL_PERMDUP_ERR               (START_QL_ERR - 9)
+#define QL_LASTERROR                  QL_PERMDUP_ERR
 
 #endif

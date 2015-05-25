@@ -205,6 +205,7 @@ private:
 		bool pushRight);
 	static bool attrGoesRight(const char* relName, const char* attrName, 
 											QL_BinaryOp *op);
+	static void pushProjIntoCond(QL_Projection* proj, QL_Condition* cond);
 };
 
 
