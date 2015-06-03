@@ -60,70 +60,48 @@ private:
 // RM style classes for managing sorted files
 ////////////////////////////////////////////////////////////////////
 
-class EX_SortHandle {
-    friend class EX_SortManager;
-    friend class EX_SortScan;
-public:
-    EX_SortHandle ();
-    ~EX_SortHandle();
-    RC InsertRec  (const char *pData, RID &rid);       // Insert a new record
-    RC DeleteRec  (const RID &rid);                    // Delete a record
-private:
-    RM_FileHdr fHdr;
-    PF_FileHandle pf_fh;
-    int bIsOpen;
-    int bHeaderChanged;
+
+struct EX_PageHdr {
+	int numrecs;
 };
 
-class EX_SortManager {
-    friend class EX_Sorter;
+// loads into a file maintaining a fill factor
+class EX_Loader {
 public:
-    EX_SortManager(PF_Manager &pfm);
-    ~EX_SortManager   ();
-
-    RC CreateFile (const char *fileName, int recordSize);
-    RC DestroyFile(const char *fileName);
-    RC OpenFile   (const char *fileName, EX_SortHandle &sh);
-
-    RC CloseFile  (EX_SortHandle &sh);
+	EX_Loader(PF_Manager &pfm);
+	~EX_Loader();
+	RC Create(char *fileName, float ff, int recsize);
+	RC PutRec(char* data);
+	RC Close();
 private:
-    PF_Manager *pf_manager;
+	PF_Manager* pfm;
+	float ff;
+	PF_FileHandle fh;
+	bool isOpen;
+	int recsize;
+	int currPage;
+	int recsInCurrPage;
+	int capacity;
 };
 
-
-
-
-
-class EX_SortScanOp {
+// reads from a file created by loader
+class EX_Scanner {
 public:
-    EX_SortScanOp  (const EX_SortHandle &sh, CompOp compOp, void *value);
-    ~EX_SortScanOp ();
-
-    RC Open(); 
-    RC Next(RM_Record &rec);
-    
-    RC Close();
+	EX_Scanner(PF_Manager &pfm);
+	~EX_Scanner();
+	RC Open(char* fileName, int startPage, bool goRight, int recsize);
+	RC Next(std::vector<char> &rec);
+	RC Reset();
+	RC Close();
 private:
-
+	PF_Manager* pfm;
+	PF_FileHandle fh;
+	bool isOpen;
+	int recsize;
+	int currPage;
+	int currSlot;
+	int increment;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // Macro for error forwarding
@@ -133,5 +111,14 @@ RC tmp_rc = (expr);\
 if (tmp_rc != OK_RC) \
     return ((tmp_rc > 0) ? WARN : ERR); \
 } while (0)
+
+//
+// Print-error function
+//
+void EX_PrintError(RC rc);
+
+
+
+
 
 #endif

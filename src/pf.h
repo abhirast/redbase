@@ -69,6 +69,7 @@ class PF_BufferMgr;
 
 class PF_FileHandle {
    friend class PF_Manager;
+   friend class EX_Scanner;
 public:
    PF_FileHandle  ();                            // Default constructor
    ~PF_FileHandle ();                            // Destructor

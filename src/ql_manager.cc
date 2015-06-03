@@ -168,8 +168,8 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     // sorting test
     EX_Sorter sorter(*this->rmm, 0, *root, 2);
     sorter.sort();
-
-
+    
+    
 
     ///////////////////////////////////////////////
 

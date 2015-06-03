@@ -251,3 +251,138 @@ RC EX_Sorter::createSortedChunk(char *fileName, float ff,
 	return OK_RC;
 }
 
+////////////////////////////////////////////////////////////
+// RM style classes for managing sorted files
+////////////////////////////////////////////////////////////
+
+
+EX_Loader::EX_Loader(PF_Manager &pfm) {
+	this->pfm = &pfm;
+	isOpen = false;
+}
+
+EX_Loader::~EX_Loader() {
+	// nothing to be done
+}
+
+RC EX_Loader::Create(char *fileName, float ff, int recsize) {
+	RC WARN = 504, ERR = -504;
+	if (isOpen) return WARN;
+	this->ff = ff;
+	this->recsize = recsize;
+	this->capacity = (PF_PAGE_SIZE - sizeof(EX_PageHdr)) / recsize;
+	if (recsize > PF_PAGE_SIZE - sizeof(EX_PageHdr)) return WARN;
+	EX_ErrorForward(pfm->CreateFile(fileName));
+	EX_ErrorForward(pfm->OpenFile(fileName, fh));
+	isOpen = true;
+	currPage = 0;
+	recsInCurrPage = 0;
+	return OK_RC;
+}
+
+RC EX_Loader::PutRec(char *data) {
+	RC WARN = 505, ERR = -505;
+	PF_PageHandle ph;
+	if (!isOpen) return WARN;
+	if (recsInCurrPage == 0) {
+		// allocate a new page
+		EX_ErrorForward(fh.AllocatePage(ph));
+	} else {
+		EX_ErrorForward(fh.GetThisPage(currPage, ph));
+	}
+	char *contents;
+	EX_ErrorForward(ph.GetData(contents));
+	EX_PageHdr *pHdr = (EX_PageHdr*) contents;
+	char *dest = contents + sizeof(EX_PageHdr) + recsInCurrPage * recsize;
+	memcpy(dest, data, recsize);
+	recsInCurrPage++;
+	pHdr->numrecs = recsInCurrPage;
+	EX_ErrorForward(fh.MarkDirty(currPage));
+	EX_ErrorForward(fh.UnpinPage(currPage));
+	if (recsInCurrPage + 1 > ff * this->capacity) {
+		// assign a new page if fill factor assigned
+		recsInCurrPage = 0;
+		currPage++;
+	}
+	return OK_RC;
+}
+
+RC EX_Loader::Close() {
+	RC WARN = 506, ERR = -506;
+	if (!isOpen) return WARN;
+	EX_ErrorForward(pfm->CloseFile(fh));
+	isOpen = false;
+	return OK_RC;
+}
+
+
+EX_Scanner::EX_Scanner(PF_Manager &pfm) {
+	this->pfm = &pfm;
+	isOpen = false;
+}
+
+EX_Scanner::~EX_Scanner() {
+	// nothing to be done
+}
+
+RC EX_Scanner::Open(char* fileName, int startPage, bool goRight, int recsize) {
+	RC WARN = 507, ERR = -507;
+	if (isOpen) return WARN;
+	this->recsize = recsize;
+	EX_ErrorForward(pfm->OpenFile(fileName, fh));
+	isOpen = true;
+	currPage = (goRight) ? 0 : fh.hdr.numPages - 1;
+	currSlot = -1;
+	increment = (goRight) ? 1 : -1;
+	return OK_RC;
+}
+
+RC EX_Scanner::Next(vector<char> &rec) {
+	RC WARN = 508, ERR = -508;
+	if (!isOpen) return WARN;
+	// check for end of file
+	if ((currPage < 0 && increment < 0) ||
+		(currPage == fh.hdr.numPages && increment > 0)) {
+		return QL_EOF;
+	}
+	rec.resize(recsize);
+	// get the current page and read its data
+	char *contents;
+	PF_PageHandle ph;
+	EX_ErrorForward(fh.GetThisPage(currPage, ph));
+	EX_ErrorForward(ph.GetData(contents));
+	EX_PageHdr *pHdr = (EX_PageHdr*) contents;
+	if (currSlot == -1) {
+		currSlot = (increment > 0) ? 0 : pHdr->numrecs - 1;
+	}
+	int numrecs = pHdr->numrecs;
+	char *src = contents + sizeof(EX_PageHdr) + currSlot * recsize;
+	memcpy(&rec[0], src, recsize);
+	EX_ErrorForward(fh.UnpinPage(currPage));
+
+	// change the slot number
+	currSlot += increment;
+	if (currSlot < 0 || currSlot >= numrecs) {
+		// assign a new slot and go to next page
+		currSlot = -1;
+		currPage += increment;
+	}
+	return OK_RC;
+}
+
+RC EX_Scanner::Reset() {
+	RC WARN = 509;
+	if (!isOpen) return WARN;
+	currPage = (increment > 0) ? 0 : fh.hdr.numPages - 1;
+	currSlot = -1;
+	return OK_RC;
+}
+
+RC EX_Scanner::Close() {
+	RC WARN = 510, ERR = -510;
+	if (!isOpen) return WARN;
+	EX_ErrorForward(pfm->CloseFile(fh));
+	isOpen = false;
+	return OK_RC;
+}
+
