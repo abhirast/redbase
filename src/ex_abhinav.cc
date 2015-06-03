@@ -218,27 +218,6 @@ void EX_Sorter::cleanUp(vector<char*> &pages, vector<int> &numrecs) {
 	}
 }
 
-/* 	Modify the RM classes to construct a file which allows creation of 
-	files that can do inserts into a file maintaining the fill factor.
-	1. The page numbers should be sequenctially assigned. 
-	2. The number of pages in the file is stores in the file header
-	3. Set up the free 
-
-	Make a very lightweight class for doing sorted scans
-	EX_SortManager, EX_SortHandle and EX_SortScan
-	Functionalities needed-
-	1. Load Insert record - store last inserted RID
-	2. Insert record
-	3. Delete record
-	4. Each file has a corresponding index file in which minimum records
-		of each page are stored
-	EX_SortManager - Open, Delete, Create and Close File
-	EX_SortHandle - InsertRec DeleteRec - Calls Delete file when overflow 
-					occures
-	EX_SortScan - Accesses the appropriate page from the catalog to fetch
-					the desired reccord. Can be used for scan. Only supports
-					scan on operators ==, <=, >=, >, <
-*/
 
 RC EX_Sorter::createSortedChunk(char *fileName, float ff, 
 					vector<char*> &pages, vector<int> &numrecs) {
@@ -255,6 +234,24 @@ RC EX_Sorter::createSortedChunk(char *fileName, float ff,
 // RM style classes for managing sorted files
 ////////////////////////////////////////////////////////////
 
+/* 	Modify the RM classes to construct a file which allows creation of 
+	files that can do inserts into a file maintaining the fill factor.
+	1. The page numbers should be sequenctially assigned. 
+	2. The number of pages in the file is stores in the file header
+	
+	Functionalities needed-
+	1. Load Insert record - store last inserted RID
+	2. Insert record
+	3. Delete record
+	4. Each file has a corresponding index file in which minimum records
+		of each page are stored
+	EX_SortManager - Open, Delete, Create and Close File
+	EX_SortHandle - InsertRec DeleteRec - Calls Delete file when overflow 
+					occures
+	EX_SortScan - Accesses the appropriate page from the catalog to fetch
+					the desired reccord. Can be used for scan. Only supports
+					scan on operators ==, <=, >=, >, <
+*/
 
 EX_Loader::EX_Loader(PF_Manager &pfm) {
 	this->pfm = &pfm;
