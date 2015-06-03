@@ -16,6 +16,7 @@
 #include "rm.h"
 #include "parser.h"
 #include "ql_internal.h"
+#include "ex.h"
 
 using namespace std;
 
@@ -162,25 +163,36 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     *************************************/
     QL_Op* root = opTree.back();
     
-    QL_Optimizer::pushCondition(root);
-    QL_Optimizer::pushProjection(root);
-    // print the result
-    if (bQueryPlans) {
-        printPlanHeader("SELECT", " ");
-        printOperatorTree(root, 0);
-        printPlanFooter();
-    }
 
-    vector<char> data;
-    QL_ErrorForward(root->Open());
-    DataAttrInfo* attrs = &(root->attributes[0]);
-    Printer p(attrs, root->attributes.size());
-    p.PrintHeader(cout);
-    while (root->Next(data) == OK_RC) {
-        p.Print(cout, &data[0]);
-    }
-    p.PrintFooter(cout);
-    SM_ErrorForward(root->Close());
+    //////////////////////////////////////////////
+    // sorting test
+    EX_Sorter sorter(*this->rmm, 0, *root, 2);
+    sorter.sort();
+
+
+
+    ///////////////////////////////////////////////
+
+
+    // QL_Optimizer::pushCondition(root);
+    // QL_Optimizer::pushProjection(root);
+    // // print the result
+    // if (bQueryPlans) {
+    //     printPlanHeader("SELECT", " ");
+    //     printOperatorTree(root, 0);
+    //     printPlanFooter();
+    // }
+
+    // vector<char> data;
+    // QL_ErrorForward(root->Open());
+    // DataAttrInfo* attrs = &(root->attributes[0]);
+    // Printer p(attrs, root->attributes.size());
+    // p.PrintHeader(cout);
+    // while (root->Next(data) == OK_RC) {
+    //     p.Print(cout, &data[0]);
+    // }
+    // p.PrintFooter(cout);
+    // SM_ErrorForward(root->Close());
     delete root;
     //////////////////////////////////////////////////////////////
     return OK_RC;

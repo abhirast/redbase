@@ -26,6 +26,7 @@ class QL_Manager {
     friend class QL_Condition;
     friend class QL_Optimizer;
     friend class QL_Projection;
+    friend class EX_Sorter;
 public:
     QL_Manager (SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm);
     ~QL_Manager();                       // Destructor

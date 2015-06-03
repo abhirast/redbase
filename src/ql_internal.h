@@ -12,6 +12,7 @@ enum OpType {
 	IX_LEAF = 2,
 	COND = 3,
 	PROJ = 4,
+	SORTED_LEAF = 5,
 	PERM_DUP = 0,
 	REL_CROSS = -1,
 	REL_JOIN = -2
