@@ -166,30 +166,22 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 
     //////////////////////////////////////////////
     // sorting test
-    // EX_Sorter sorter(*this->rmm, 0, *root, 2);
-    // sorter.sort();
-    EX_Loader loader(*rmm->pf_manager);
-    EX_Scanner scner(*rmm->pf_manager);
-    char *fileName = "abhinav";
-    QL_ErrorForward(loader.Create(fileName, 0.8, 154));
-    vector<char> data;
-    QL_ErrorForward(root->Open());
-    while (root->Next(data) == OK_RC){
-        QL_ErrorForward(loader.PutRec(&data[0]));
-    }
-    QL_ErrorForward(loader.Close());
-    QL_ErrorForward(scner.Open(fileName, 0, true, 154));
-    root->Reset();
-    DataAttrInfo* attrs = &(root->attributes[0]);
-    Printer p(attrs, root->attributes.size());
-    p.PrintHeader(cout);
-    while (scner.Next(data) == OK_RC) {
-        p.Print(cout, &data[0]);
-    }
-    QL_ErrorForward(scner.Close());
-    p.PrintFooter(cout);
-    SM_ErrorForward(root->Close());
+    // vector<char> data;
+    EX_Sorter sorter(*this->rmm, *root, 0);
+    char* fname = "abhinav";
+    sorter.sort(fname, 1.0);
 
+    // EX_Scanner escn(*(*this->rmm).pf_manager);
+    // char *fileName = "_abhinav.0";
+    // escn.Open(fileName, 0, true, 154);
+    // DataAttrInfo* attrs = &(root->attributes[0]);
+    // Printer p(attrs, root->attributes.size());
+    // p.PrintHeader(cout);
+    // while (escn.Next(data) == OK_RC) {
+    //     p.Print(cout, &data[0]);
+    // }
+    // p.PrintFooter(cout);
+    
 
     ///////////////////////////////////////////////
 

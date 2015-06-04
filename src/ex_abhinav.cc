@@ -8,6 +8,10 @@
 
 #include <memory>
 #include <sstream>
+#include <queue>
+#include <assert.h>
+#include <unistd.h>
+#include <stdio.h>
 #include "redbase.h"
 #include "ql.h"
 #include "sm.h"
@@ -22,7 +26,7 @@
 using namespace std;
 
 
-EX_Sort::EX_Sort(QL_Op &child) {
+EX_Sort::EX_Sort(QL_Op &child, int attrIndex) {
 
 }
 
@@ -30,6 +34,9 @@ EX_Sort::~EX_Sort() {
 
 }
 
+/*  exhaust all the tuples of the child and make a new file. The
+	new file is temporary if the index is a relation
+*/
 RC EX_Sort::Open() {
 	return OK_RC;
 }
@@ -46,9 +53,11 @@ RC EX_Sort::Close() {
 	return OK_RC;
 }
 
-
-EX_Sorter::EX_Sorter(RM_Manager &rmm, char *fileName, 
-								QL_Op &scan, int attrIndex) {
+/* Sorts the tuples output by scan based on the attribute attrIndex
+	in ascending order. The sorted file is stored in the file named
+	fileName.
+*/
+EX_Sorter::EX_Sorter(RM_Manager &rmm, QL_Op &scan, int attrIndex) {
 	this->pfm = rmm.pf_manager;
 	this->rmm = &rmm;
 	this->scan = &scan;
@@ -57,6 +66,7 @@ EX_Sorter::EX_Sorter(RM_Manager &rmm, char *fileName,
 	this->attrType = info.attrType;
 	this->offset = info.offset;
 	this->attrLength = info.attrLength;
+	cout << offset << " " << attrLength << endl;
 	this->recsize = scan.attributes.back().offset + 
 							scan.attributes.back().attrLength;
 	this->recsPerPage = PF_PAGE_SIZE / (this->recsize);
@@ -68,23 +78,151 @@ EX_Sorter::~EX_Sorter() {
 	delete[] buffer;
 }
 
-RC EX_Sorter::sort() {
-	RC WARN = 501, ERR = -501;
+// RC EX_Sorter::sort(char *fileName, float ff) {
+// 	RC WARN = 501, ERR = -501;
+//    	// open the scan
+// 	EX_ErrorForward(scan->Open());
+// 	queue<int> fileq;
+//    	// load relations into buffer pages
+//    	vector<char*> pages;
+//    	vector<int> numrecs;
+//    	int chunkNum = 0;
+//    	RC rc = fillBuffer(pages, numrecs);
+//    	while (rc == OK_RC) {
+//    		// merge the sorted buffer pages and load them into file
+//    		EX_ErrorForward(createSortedChunk(fileName, chunkNum, 1.0, 
+//    			pages, numrecs));
+//    		fileq.push(chunkNum);
+//    		cleanUp(pages, numrecs);
+//    		chunkNum ++;
+//    		cout << chunkNum << endl;
+//    		rc = fillBuffer(pages, numrecs);
+//    	}
+//    	if (rc != QL_EOF) EX_ErrorForward(rc);
+//    	// at this point, sorted chunks have been created
+// 	EX_ErrorForward(scan->Close());
+// 	return OK_RC;
+// }
 
+RC EX_Sorter::sort(const char *fileName, float ff) {
+	RC WARN = 501, ERR = -501;
    	// open the scan
 	EX_ErrorForward(scan->Open());
-   	
-   	// allocate buffer pages for sorting
-   	
-
-    // load the records in the buffer
-    
-	// sort the records
-
-	// write the sorted records to file
+	vector<char*> pages;
+   	vector<int> numrecs;
+   	RC rc = fillBuffer(pages, numrecs);
+   	int chunkNum = 0;
+   	queue<int> fileq;
+   	while (rc == OK_RC) {
+   		EX_ErrorForward(createSortedChunk(fileName, chunkNum, 1.0,
+    			pages, numrecs));
+   		fileq.push(chunkNum);
+    	chunkNum++;
+    	cleanUp(pages, numrecs);
+   		rc = fillBuffer(pages, numrecs);
+   	}
+   	if (rc != QL_EOF) EX_ErrorForward(rc);
+   	// at this point, sorted chunks have been created
+	EX_ErrorForward(scan->Close());
+	cleanUp(pages, numrecs);
+	// now merge the sorted chunks
+	// use all except one buffer page to read the chunks. This
+	// page will be used to read a new block when a page from a 
+	// file is exhausted
+	int buffSize = PF_BUFFER_SIZE - 1;
+	vector<EX_Scanner*> scanners;
+	vector<int> chunkIndices;
+	while (fileq.size() > 1) {
+		// merge files from the front of the queue and enqueue
+		// the result at the back
+		scanners.clear();
+		pages.clear();
+		numrecs.clear();
+		char temp[3*MAXNAME];
+		int qsize = fileq.size();
+		// open scan on files and read one page from each file
+		for (int i = 0; i < min(qsize, buffSize); i++) {
+			EX_Scanner* scn = new EX_Scanner(*pfm);
+			sprintf(temp, "_%s.%d", fileName, fileq.front());
+			chunkIndices.push_back(fileq.front());
+			fileq.pop();
+			EX_ErrorForward(scn->Open(temp, 0, true, recsize));
+			char *buffpage;
+			int num;
+			EX_ErrorForward(pfm->AllocateBlock(buffpage));
+			EX_ErrorForward(scn->NextBlock(buffpage, num));
+			pages.push_back(buffpage);
+			numrecs.push_back(num);
+			scanners.push_back(scn);
+		}
+		// merge blocks and output to a merged file
+		EX_Loader loader(*pfm);
+		sprintf(temp, "_%s.%d", fileName, chunkNum);
+		fileq.push(chunkNum);
+		chunkNum++;
+		float fillFactor = (qsize > buffSize) ? 1.0 : ff;
+		EX_ErrorForward(loader.Create(temp, fillFactor, recsize));
+		vector<int> index(scanners.size(), 0);
+		unsigned int exhaustedCount = 0;
+		RC rc;
+		while (exhaustedCount != scanners.size()) {
+			// get the index of the minimum element
+			int idx = findIndex(pages, numrecs, index);
+			EX_ErrorForward(loader.PutRec(pages[idx] + index[idx] * recsize));
+			index[idx]++;
+			if (index[idx] == numrecs[idx]) {
+				rc = scanners[idx]->NextBlock(pages[idx], numrecs[idx]);
+				if (rc == OK_RC) index[idx] = 0;
+				else if (rc != QL_EOF){
+					cleanUp(pages, numrecs);
+					EX_ErrorForward(rc);
+				}
+				else exhaustedCount++; 
+			}
+		}
+		cleanUp(pages, numrecs);
+		// close the scanners and delete the files
+		for (unsigned int i = 0; i < scanners.size(); i++) {
+			EX_ErrorForward(scanners[i]->Close());
+			delete scanners[i];
+			char temp[3 * MAXNAME];
+			sprintf(temp, "_%s.%d", fileName, chunkIndices[i]);
+			if (unlink(temp) != 0) return WARN;
+		}
+		EX_ErrorForward(loader.Close());
+	}
+	// now there is exactly one file in the fileq, rename it to desired file
+	// rename the chunk file to fileName
+	char temp[3 * MAXNAME];
+	sprintf(temp, "_%s.%d", fileName, fileq.front());
+	if (rename(temp, fileName) != 0) return WARN;
+	// verify the sorted file 
+	DataAttrInfo* attrs = &(scan->attributes[0]);
+	Printer p(attrs, scan->attributes.size());
+   	p.PrintHeader(cout);
+    EX_Scanner escn(*pfm);
+    escn.Open(fileName, 0, true, recsize);
+    vector<char> data;
+    while (escn.Next(data) == OK_RC) {
+    	p.Print(cout, &data[0]);
+    }
+    p.PrintFooter(cout);
+    escn.Close();
 	return OK_RC;
 }
 
+// verify the chunk 
+    	// Printer p(attrs, scan->attributes.size());
+    	// p.PrintHeader(cout);
+    	// char temp[100];
+    	// sprintf(temp, "_%s.%d", fileName, chunkNum);
+    	// EX_Scanner escn(*pfm);
+    	// escn.Open(temp, 0, true, recsize);
+    	// vector<char> data;
+    	// while (escn.Next(data) == OK_RC) {
+    	// 	p.Print(cout, &data[0]);
+    	// }
+    	// p.PrintFooter(cout);
 
 /*	Sort a page using quick sort without shuffle step
 	To sort a page, call pageSort(page, 0, numrecs-1)
@@ -120,7 +258,7 @@ int EX_Sorter::partition(char *page, int lo, int hi) {
     }
 
     // put partitioning item v at jth slot
-    exch(page + lo * recsize, page + j * recsize);
+    if (lo != j) exch(page + lo * recsize, page + j * recsize);
 
     // now, page[lo .. j-1] <= page[j] <= a[j+1 .. hi]
     return j;
@@ -129,6 +267,7 @@ int EX_Sorter::partition(char *page, int lo, int hi) {
 
 bool EX_Sorter::less (char* v, char *w) {
 	// compare v + offset and w + offset
+	if (v == 0 || w == 0) return true; // used in findIndex
 	return QL_Manager::lt_op((void*) (v + offset), (void*) (w + offset), 
 				attrLength, attrLength, attrType);
 }
@@ -169,16 +308,17 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 	pages.clear();
 	numrecs.clear();
 	RC rc = OK_RC;
-	for (int i = 0; i < bufferSize; i++) {
+	for (int pn = 0; pn < bufferSize; pn++) {
 		// allocate a new scan page
 		char *page;
-		int num = 0;
 		rc = pfm->AllocateBlock(page);
 		if (rc != OK_RC) {
+			pfm->DisposeBlock(page);
 			cleanUp(pages, numrecs);
 			return rc;
 		}
 		vector<char> data;
+		int num = 0;
 		for (int j = 0; j < recsPerPage; j++) {
 			rc = scan->Next(data);
 			if (rc == QL_EOF) {
@@ -186,6 +326,7 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 				break;
 			} else if (rc != OK_RC) {
 				// dispose scratch pages and return error
+				pfm->DisposeBlock(page);
 				cleanUp(pages, numrecs);
 				return rc;
 			} else {
@@ -197,6 +338,8 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 		// at this point rc can be QL_EOF or OK_RC
 		if (rc == QL_EOF && num == 0) {
 			pfm->DisposeBlock(page);
+			// no record was read
+			if (pn == 0) return QL_EOF;
 			break;
 		}
 		pages.push_back(page);
@@ -204,8 +347,7 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 		// sort the page
 		pageSort(page, 0, num - 1);
 	}
-	// at this point rc can be QL_EOF or OK_RC
-	return rc;
+	return OK_RC;
 }
 
 // to be called to free allocated scratch pages if error occurs
@@ -213,22 +355,55 @@ void EX_Sorter::cleanUp(vector<char*> &pages, vector<int> &numrecs) {
 	for (unsigned int k = 0; k < pages.size(); k++) {
 		// dont need to forward error because one has already occured
 		pfm->DisposeBlock(pages[k]);
-		pages.clear();
-		numrecs.clear();
 	}
+	pages.clear();
+	numrecs.clear();
+}
+
+/* 	finds the page containing the smallest record at the indices pointed to
+	by the vector index.
+*/
+
+int EX_Sorter::findIndex(vector<char*> &pages, vector<int> &numrecs, 
+													vector<int> &index) {
+	// find the first valid page, which has not exhausted all its records
+	int valid = -1;
+	assert(index.size() == numrecs.size());
+	char *record = 0;
+	for (unsigned int i = 0; i < index.size(); i++) {
+		char *curr = pages[i] + index[i] * recsize;
+		if (index[i] < numrecs[i] && less(curr, record)) {
+			record = curr;
+			valid = i;
+		}
+	}
+	return valid;
 }
 
 
-RC EX_Sorter::createSortedChunk(char *fileName, float ff, 
+
+
+RC EX_Sorter::createSortedChunk(const char *fileName, int chunkNum, float ff, 
 					vector<char*> &pages, vector<int> &numrecs) {
 	// allocate a new file
 	RC WARN = 503, ERR = -503;
 	if (pages.size() == 0) return OK_RC;
-	EX_ErrorForward(rmm->CreateFile(fileName, recsize));
-	RM_FileHandle fh;
-	EX_ErrorForward(rmm->OpenFile(fileName, fh));
+	EX_Loader loader(*rmm->pf_manager);
+	vector<char> fname(3*MAXNAME);
+	sprintf(&fname[0], "_%s.%d", fileName, chunkNum);
+	EX_ErrorForward(loader.Create(&fname[0], ff, recsize));
+	vector<int> index(pages.size(), 0);
+	int idx = findIndex(pages, numrecs, index);
+	while (idx >= 0) {
+		EX_ErrorForward(loader.PutRec(pages[idx] + index[idx] * recsize));
+		index[idx]++;
+		idx = findIndex(pages, numrecs, index);
+	}
+	EX_ErrorForward(loader.Close());
 	return OK_RC;
 }
+
+
 
 ////////////////////////////////////////////////////////////
 // RM style classes for managing sorted files
@@ -268,7 +443,7 @@ RC EX_Loader::Create(char *fileName, float ff, int recsize) {
 	this->ff = ff;
 	this->recsize = recsize;
 	this->capacity = (PF_PAGE_SIZE - sizeof(EX_PageHdr)) / recsize;
-	if (recsize > PF_PAGE_SIZE - sizeof(EX_PageHdr)) return WARN;
+	if (recsize > PF_PAGE_SIZE - (int) sizeof(EX_PageHdr)) return WARN;
 	EX_ErrorForward(pfm->CreateFile(fileName));
 	EX_ErrorForward(pfm->OpenFile(fileName, fh));
 	isOpen = true;
@@ -322,13 +497,18 @@ EX_Scanner::~EX_Scanner() {
 	// nothing to be done
 }
 
-RC EX_Scanner::Open(char* fileName, int startPage, bool goRight, int recsize) {
+RC EX_Scanner::Open(const char* fileName, int startPage, 
+									bool goRight, int recsize) {
 	RC WARN = 507, ERR = -507;
 	if (isOpen) return WARN;
 	this->recsize = recsize;
 	EX_ErrorForward(pfm->OpenFile(fileName, fh));
 	isOpen = true;
-	currPage = (goRight) ? 0 : fh.hdr.numPages - 1;
+	if (startPage < 0) {
+		currPage = (goRight) ? 0 : fh.hdr.numPages - 1;
+	} else {
+		currPage = startPage;
+	}
 	currSlot = -1;
 	increment = (goRight) ? 1 : -1;
 	return OK_RC;
@@ -382,4 +562,28 @@ RC EX_Scanner::Close() {
 	isOpen = false;
 	return OK_RC;
 }
+/*	Read a page from the file and return the number of records
+*/
+RC EX_Scanner::NextBlock(char *block, int &numrecs) {
+	RC WARN = 510, ERR = -510;
+	if (!isOpen) return WARN;
+	// check for end of file
+	if ((currPage < 0 && increment < 0) ||
+		(currPage == fh.hdr.numPages && increment > 0)) {
+		return QL_EOF;
+	}
+	// get the current page and read its data
+	char *contents;
+	PF_PageHandle ph;
+	EX_ErrorForward(fh.GetThisPage(currPage, ph));
+	EX_ErrorForward(ph.GetData(contents));
+	EX_PageHdr *pHdr = (EX_PageHdr*) contents;
+	numrecs = pHdr->numrecs;
+	char *src = contents + sizeof(EX_PageHdr);
+	memcpy(block, src, numrecs * recsize);
+	EX_ErrorForward(fh.UnpinPage(currPage));
 
+	// change the page number
+	currPage += increment;
+	return OK_RC;
+}
