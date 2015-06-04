@@ -147,7 +147,6 @@ private:
 // RM_Manager: provides RM file management
 //
 class RM_Manager {
-    friend class EX_Sorter;         // for accessing pf manager
     friend class QL_Manager;        // for accessing pf manager
 public:
     RM_Manager    (PF_Manager &pfm);

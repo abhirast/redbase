@@ -167,9 +167,9 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     //////////////////////////////////////////////
     // sorting test
     // vector<char> data;
-    EX_Sorter sorter(*this->rmm, *root, 0);
+    EX_Sorter sorter(*(this->rmm->pf_manager), *root, 0);
     char* fname = "abhinav";
-    sorter.sort(fname, 1.0);
+    cout << "error code " << sorter.sort(fname, 1.0) << endl;
 
     // EX_Scanner escn(*(*this->rmm).pf_manager);
     // char *fileName = "_abhinav.0";

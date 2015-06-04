@@ -7,57 +7,6 @@
 #ifndef EX_H
 #define EX_H
 
-const float sortFF = 0.9;
-
-/////////////////////////////////////////////////////
-// Sorting operator
-/////////////////////////////////////////////////////
-
-class EX_Sort: public QL_UnaryOp {
-public:
-	EX_Sort(QL_Op &child, int attrIndex);
-	~EX_Sort();
-	RC Open();
-	RC Next(std::vector<char> &rec);
-	RC Reset();
-	RC Close();
-private:
-	bool isOpen;
-};
-
-
-class EX_Sorter {
-public:
-	EX_Sorter(RM_Manager &rmm, QL_Op &scan, int attrIndex);
-	~EX_Sorter();
-	RC sort(const char *fileName, float ff);
-private:
-	PF_Manager *pfm;
-	RM_Manager *rmm;
-	QL_Op *scan;
-	int attrIndex;
-	AttrType attrType;
-	int offset;
-	int attrLength;
-	int recsize;
-	int recsPerPage;
-	int bufferSize;
-	char *buffer; 		// buffer for exchanging two records during quicksort
-	void pageSort(char* page, int lo, int hi);
-	int partition(char* page, int lo, int hi);
-	bool less(char *v, char *w);
-	void exch(char *v, char *w);
-	// fills buffer with records read from scan. returns the allocated pages
-	RC fillBuffer(std::vector<char*> &pages, std::vector<int> &numrecs);
-	RC createSortedChunk(const char* fileName, int chunkNum, float ff, 
-		std::vector<char*> &pages, std::vector<int> &numrecs);
-	int findIndex(std::vector<char*> &pages, std::vector<int> &numrecs, 
-		std::vector<int> &index);
-	int pagesToReserve(QL_Op* node);
-	void cleanUp(std::vector<char*> &pages, std::vector<int> &numrecs);
-};
-
-
 ////////////////////////////////////////////////////////////////////
 // RM style classes for managing sorted files
 ////////////////////////////////////////////////////////////////////
@@ -104,7 +53,71 @@ private:
 	int currPage;
 	int currSlot;
 	int increment;
+	int currPageForReset;
 };
+
+
+////////////////////////////////////////////////////////////
+// Sorter class - creates sorted files, used by operators
+////////////////////////////////////////////////////////////
+
+class EX_Sorter {
+public:
+	EX_Sorter(PF_Manager &pfm, QL_Op &scan, int attrIndex);
+	~EX_Sorter();
+	RC sort(const char *fileName, float ff);
+private:
+	PF_Manager *pfm;
+	QL_Op *scan;
+	int attrIndex;
+	AttrType attrType;
+	int offset;
+	int attrLength;
+	int recsize;
+	int recsPerPage;
+	int bufferSize;
+	char *buffer; 		// buffer for exchanging two records during quicksort
+	void pageSort(char* page, int lo, int hi);
+	int partition(char* page, int lo, int hi);
+	bool less(char *v, char *w);
+	void exch(char *v, char *w);
+	// fills buffer with records read from scan. returns the allocated pages
+	RC fillBuffer(std::vector<char*> &pages, std::vector<int> &numrecs);
+	RC createSortedChunk(const char* fileName, int chunkNum, float ff, 
+		std::vector<char*> &pages, std::vector<int> &numrecs);
+	int findIndex(std::vector<char*> &pages, std::vector<int> &numrecs, 
+		std::vector<int> &index);
+	int pagesToReserve(QL_Op* node);
+	void cleanUp(std::vector<char*> &pages, std::vector<int> &numrecs);
+};
+
+/////////////////////////////////////////////////////
+// Sorting based operators
+/////////////////////////////////////////////////////
+
+class EX_Sort: public QL_UnaryOp {
+public:
+	EX_Sort(PF_Manager *pfm, QL_Op &child, int attrIndex);
+	~EX_Sort();
+	RC Open();
+	RC Next(std::vector<char> &rec);
+	RC Reset();
+	RC Close();
+private:
+	bool isOpen;
+	int attrIndex;
+	int recsize;
+	bool deleteAtClose;
+	char* fileName;
+	PF_Manager* pfm;
+	EX_Scanner* scanner;
+};
+
+
+
+
+
+
 
 
 // Macro for error forwarding
