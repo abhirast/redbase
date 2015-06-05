@@ -22,11 +22,15 @@ Quick-sort without an  initial random shuffle has been used for external sorting
 #### Sort Merge Join ####
 Sort Merge join is implemented by a combination of two unary sorting operators and a binary merge operator. The merge operator assumes that the tuple stream coming from its children are sorted in ascending order in the join attribute. This separation of operators allows us to do more efficient query optimization, details of which are given in the next section.
 For the merge operator, the bottleneck occurs when successive tuples in the stream arriving from one of its children (say right) have the same join key. Consider the case given below, where the join key in the tuple stream from left and right child has been listed. 
-left:  1 2 2 3 4
-right: 0 2 2 2 2 2 2 2 2 5
+~~~~
+left:  1 2 2 3 4 
+right: 0 2 2 2 2 2 2 2 2 5 
+~~~~
 As soon as we encounter the second occurrence of 2 in the left stream, we need to "go back" in the right stream to retrieve the tuples. Since the operators have been implemented as forward iterators, this is not possible. So in this case, pages from the buffer pool have been used to store the duplicate tuples in the right stream. If the same join key is encountered in the next tuple of the left stream, the tuple is joined with all the tuples in the buffer. A class BufferIterator has been implemented to easily carry out this job, which converts the buffer pool into a random access iterator over the tuples.
 
 #### Query Optimization ####
+The query tree optimization in the QL part started with a 
+
 
 
 # ql_DOC #
