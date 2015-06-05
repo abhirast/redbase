@@ -233,6 +233,7 @@ EX_Sorter::EX_Sorter(PF_Manager &pfm, QL_Op &scan, int attrIndex) {
 	this->recsPerPage = PF_PAGE_SIZE / (this->recsize);
 	this->bufferSize = PF_BUFFER_SIZE - pagesToReserve(&scan);
 	this->buffer = new char[this->recsize];
+	this->seenEOF = false;
 }
 
 EX_Sorter::~EX_Sorter() {
@@ -333,17 +334,17 @@ RC EX_Sorter::sort(const char *fileName, float ff) {
 	sprintf(temp, "_%s.%d", fileName, fileq.front());
 	if (rename(temp, fileName) != 0) return WARN;
 	// verify the sorted file 
-	DataAttrInfo* attrs = &(scan->attributes[0]);
-	Printer p(attrs, scan->attributes.size());
-   	p.PrintHeader(cout);
-    EX_Scanner escn(*pfm);
-    escn.Open(fileName, 0, true, recsize);
-    vector<char> data;
-    while (escn.Next(data) == OK_RC) {
-    	p.Print(cout, &data[0]);
-    }
-    p.PrintFooter(cout);
-    escn.Close();
+	// DataAttrInfo* attrs = &(scan->attributes[0]);
+	// Printer p(attrs, scan->attributes.size());
+ //   	p.PrintHeader(cout);
+ //    EX_Scanner escn(*pfm);
+ //    escn.Open(fileName, 0, true, recsize);
+ //    vector<char> data;
+ //    while (escn.Next(data) == OK_RC) {
+ //    	p.Print(cout, &data[0]);
+ //    }
+ //    p.PrintFooter(cout);
+ //    escn.Close();
 	return OK_RC;
 }
 
@@ -414,8 +415,6 @@ int EX_Sorter::pagesToReserve(QL_Op* node) {
 			numpages = 1;
 		} else if (node->opType == IX_LEAF) {
 			numpages = 2;
-		} else if (node->opType == SORTED_LEAF) {
-			numpages = 1;
 		}
 		return numpages + pagesToReserve(unode->child);
 	} else {
@@ -432,7 +431,9 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 	pages.clear();
 	numrecs.clear();
 	RC rc = OK_RC;
+	if (seenEOF) return QL_EOF;
 	for (int pn = 0; pn < bufferSize; pn++) {
+		if (seenEOF) break;
 		// allocate a new scan page
 		char *page;
 		rc = pfm->AllocateBlock(page);
@@ -446,6 +447,7 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 		for (int j = 0; j < recsPerPage; j++) {
 			rc = scan->Next(data);
 			if (rc == QL_EOF) {
+				seenEOF = true;
 				// stop iterating through the file
 				break;
 			} else if (rc != OK_RC) {
@@ -460,14 +462,14 @@ RC EX_Sorter::fillBuffer(vector<char*> &pages, vector<int> &numrecs) {
 			}
 		}
 		// at this point rc can be QL_EOF or OK_RC
-		if (rc == QL_EOF && num == 0) {
+		if (num == 0) {
 			pfm->DisposeBlock(page);
 			// no record was read
 			if (pn == 0) return QL_EOF;
-			break;
+		} else {
+			pages.push_back(page);
+			numrecs.push_back(num);
 		}
-		pages.push_back(page);
-		numrecs.push_back(num);
 		// sort the page
 		pageSort(page, 0, num - 1);
 	}
@@ -527,12 +529,70 @@ RC EX_Sorter::createSortedChunk(const char *fileName, int chunkNum, float ff,
 	return OK_RC;
 }
 
+//////////////////////////////////////////////////////
+// Utility class for Buffer IO
+//////////////////////////////////////////////////////
 
+BufferIterator::BufferIterator(PF_Manager *pfm, int recsize, int bufferSize) {
+	this->pfm = pfm;
+	this->recsize = recsize;
+	this->pagecap = PF_PAGE_SIZE / recsize;
+	this->bufferSize = bufferSize;
+	this->numrecs = 0;
+	this->currPage = 0;
+	this->currSlot = 0;
+}
 
+BufferIterator::~BufferIterator() {
+	if (numrecs > 0) Clear();
+}
 
+RC BufferIterator::Clear() {
+	RC WARN = 512, ERR = -512;
+	for (unsigned int i = 0; i < pages.size(); i++) {
+		EX_ErrorForward(pfm->DisposeBlock(pages[i]));
+	}
+	pages.clear();
+	currPage = 0;
+	currSlot = 0;
+	numrecs = 0;
+	return OK_RC;
+}
+
+RC BufferIterator::PutRec(vector<char> &rec) {
+	RC WARN = 512, ERR = -512;
+	if (currSlot == 0) {
+		if (currPage == bufferSize) return WARN;
+		char *page;
+		EX_ErrorForward(pfm->AllocateBlock(page));
+		pages.push_back(page);
+	}
+	// put the record in the current (page, slot)
+	memcpy(pages[currPage] + recsize * currSlot, &rec[0], recsize);
+	currSlot++;
+	numrecs++;
+	if (currSlot == pagecap) {
+		currSlot = 0;
+		currPage++;
+	}
+	return OK_RC;
+}
+
+int BufferIterator::Size() {
+	return numrecs;
+}
+
+char* BufferIterator::GetRec(int i) {
+	if (i >= numrecs) return 0;
+	int pnum = i/pagecap;
+	int snum = i % pagecap;
+	return pages[pnum] + recsize * snum;
+}
 //////////////////////////////////////////////////////
 // Sorting based operators
 //////////////////////////////////////////////////////
+
+/* Operator used in joins or ORDER BY queries */
 
 EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 	this->attributes = child.attributes;
@@ -542,10 +602,14 @@ EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 	isOpen = false;
 	deleteAtClose = (child.opType != RM_LEAF);
 	if (deleteAtClose) {
-		// generate a tmp name
-		fileName = new char[L_tmpnam];
-		tmpnam(fileName);
-	} else {
+		// generate a unique fileName
+		fileName = new char[21];
+		gen_random(fileName, 20);
+		while (access(fileName, F_OK) == 0) {
+			gen_random(fileName, 2*MAXNAME);
+		}
+		cout << "fileName " << fileName << endl;
+ 	} else {
 		// use relname.attrname.sorted
 		fileName = new char[2*MAXNAME + 10];
 		sprintf(fileName, "%s.%s.sorted", attributes[attrIndex].relName, 
@@ -559,6 +623,7 @@ EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 	for (unsigned int i = 0; i < this->attributes.size(); i++) {
 		this->attributes[i].indexNo = -1;
 	}
+	opType = SORT;
 	desc << "SORT BY " << attributes[attrIndex].relName << ".";
 	desc << attributes[attrIndex].attrName;
 }
@@ -566,6 +631,7 @@ EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 EX_Sort::~EX_Sort() {
 	if (fileName) delete[] fileName;
 	if (scanner) delete scanner;
+	if (child) delete child;
 }
 
 /*  exhaust all the tuples of the child and make a new file. The
@@ -587,6 +653,7 @@ RC EX_Sort::Open() {
 }
 
 RC EX_Sort::Next(vector<char> &rec) {
+	rec.resize(recsize);
 	return scanner->Next(rec);
 }
 
@@ -595,5 +662,297 @@ RC EX_Sort::Reset() {
 }
 
 RC EX_Sort::Close() {
+	if (deleteAtClose) {
+		// delete the file
+		RC rc = unlink(fileName);
+		if (rc != 0) return rc;
+	}
 	return scanner->Close();
 }
+
+void EX_Sort::gen_random(char *s, const int len) {
+    srand(time(0));
+    for (int i = 0; i < len; ++i) {
+        int randomChar = rand()%(26+26+10);
+        if (randomChar < 26)
+            s[i] = 'a' + randomChar;
+        else if (randomChar < 26+26)
+            s[i] = 'A' + randomChar - 26;
+        else
+            s[i] = '0' + randomChar - 26 - 26;
+    }
+    s[len] = 0;
+}
+
+
+/* Merge Join operator - assumes children give records in ascending
+	order of the join attribute
+ */
+
+EX_MergeJoin::EX_MergeJoin(PF_Manager *pfm, QL_Op &left, QL_Op &right, 
+												const Condition *cond) {
+	this->lchild = &left;
+	this->rchild = &right;
+	this->parent = 0;
+	left.parent = this;
+	right.parent = this;
+	isOpen = false;
+	int lindex = QL_Manager::findAttr(cond->lhsAttr.relName, 
+				cond->lhsAttr.attrName, lchild->attributes);
+	int rindex = QL_Manager::findAttr(cond->rhsAttr.relName, 
+				cond->rhsAttr.attrName, rchild->attributes);
+	if (lindex < 0 && rindex < 0) {
+		lindex = QL_Manager::findAttr(cond->rhsAttr.relName, 
+				cond->rhsAttr.attrName, lchild->attributes);
+		rindex = QL_Manager::findAttr(cond->lhsAttr.relName, 
+				cond->lhsAttr.attrName, rchild->attributes);
+	}
+
+	lattr = lchild->attributes[lindex];
+	rattr = rchild->attributes[rindex];
+	attributes = lchild->attributes;
+	auto temp = rchild->attributes;
+	// change offset of rchild attributes
+	leftRecSize = attributes.back().offset + attributes.back().attrLength;
+	for (unsigned int i = 0; i < temp.size(); i++) {
+		temp[i].offset += leftRecSize;
+	}
+	attributes.insert(attributes.end(), temp.begin(), temp.end());
+	rightRecSize = attributes.back().offset + 
+			attributes.back().attrLength - leftRecSize;
+	// change indexNo of all attributes
+	for (unsigned int i = 0; i < attributes.size(); i++) {
+		attributes[i].indexNo = -1;
+	}
+	// 2 for reading sorted relations and one for results
+	int bufferSize = PF_BUFFER_SIZE - 3;
+	this->buffit = new BufferIterator(pfm, rightRecSize, bufferSize);
+	opType = MERGE_JOIN;
+	desc << "MERGE JOIN ON " << "";
+}
+
+EX_MergeJoin::~EX_MergeJoin() {
+	if (lchild != 0) delete lchild;
+	if (rchild != 0) delete rchild;
+	if (buffit != 0) delete buffit;
+}
+
+RC EX_MergeJoin::Open() {
+	RC WARN = EX_MERGE_WARN, ERR = EX_MERGE_ERR;
+	if (isOpen) return WARN;
+	QL_ErrorForward(lchild->Open());
+	QL_ErrorForward(rchild->Open());
+	isOpen = true;
+	leftrec.clear();
+	rightrec.clear();
+	buffit->Clear();
+	bufferIndex = 0;
+	rightEOF = false;
+	return OK_RC;
+}
+
+RC EX_MergeJoin::Next(vector<char> &rec) {
+	RC WARN = QL_EOF, ERR = EX_MERGE_ERR;
+	if (leftrec.size() == 0) {
+		leftrec.resize(leftRecSize);
+		EX_ErrorForward(lchild->Next(leftrec));
+	}
+	if (rightrec.size() == 0) {
+		rightrec.resize(rightRecSize);
+		EX_ErrorForward(rchild->Next(rightrec));	
+	}
+	// if buffer is not empty
+	if (buffit->Size() > 0) {
+		// join with the record at bufferIdx
+		rec.resize(leftRecSize + rightRecSize);
+		memcpy(&rec[0], &leftrec[0], leftRecSize);
+		memcpy(&rec[leftRecSize], buffit->GetRec(bufferIndex), rightRecSize);
+		bufferIndex++;
+		if (bufferIndex == buffit->Size()) {
+			RC rc = lchild->Next(leftrec);
+			if (rc != OK_RC) {
+				EX_ErrorForward(buffit->Clear()); 
+				return OK_RC; 
+			}
+			bufferIndex = 0;
+			// clear the buffer if the new record doesn't fit join criteria
+			if (!equal(&leftrec[0], buffit->GetRec(0))) {
+				EX_ErrorForward(buffit->Clear());
+			}
+		}
+		return OK_RC;
+	}
+	if (rightEOF) return QL_EOF;
+	bool found = false;
+	while (!found) {
+		if (less(&leftrec[0], &rightrec[0])) {
+			EX_ErrorForward(lchild->Next(leftrec));
+		} else if (more(&leftrec[0], &rightrec[0])) {
+			EX_ErrorForward(rchild->Next(rightrec));
+		} else {
+			// fill buffer with right page
+			do {
+				EX_ErrorForward(buffit->PutRec(rightrec));
+				EX_ErrorForward(rchild->Next(rightrec));
+			} while (equal(&leftrec[0], &rightrec[0]));
+			// output join with the first record in buffer
+			rec.resize(leftRecSize + rightRecSize);
+			memcpy(&rec[0], &leftrec[0], leftRecSize);
+			memcpy(&rec[leftRecSize], buffit->GetRec(0), rightRecSize);
+			bufferIndex = 1;
+			found = true;
+		}
+	}
+	return OK_RC;
+}
+
+RC EX_MergeJoin::Reset() {
+	RC WARN = EX_MERGE_WARN, ERR = EX_MERGE_ERR;
+	if (!isOpen) return WARN;
+	EX_ErrorForward(lchild->Reset());
+	EX_ErrorForward(rchild->Reset());
+	leftrec.clear();
+	rightrec.clear();
+	bufferIndex = 0;
+	EX_ErrorForward(buffit->Clear());
+	rightEOF = false;
+	return OK_RC;
+}
+
+RC EX_MergeJoin::Close() {
+	RC WARN = EX_MERGE_WARN, ERR = EX_MERGE_ERR;
+	if (!isOpen) return WARN;
+	EX_ErrorForward(lchild->Close());
+	EX_ErrorForward(rchild->Close());
+	EX_ErrorForward(buffit->Clear());
+	return OK_RC;
+}
+
+bool EX_MergeJoin::less(char* v, char *w) {
+	return QL_Manager::lt_op((void*) (v + lattr.offset), 
+		(void*) (w + rattr.offset),	lattr.attrLength, rattr.attrLength, 
+		lattr.attrType);
+}
+
+bool EX_MergeJoin::more(char* v, char *w) {
+	return QL_Manager::gt_op((void*) (v + lattr.offset), 
+		(void*) (w + rattr.offset),	lattr.attrLength, rattr.attrLength, 
+		lattr.attrType);
+}
+
+bool EX_MergeJoin::equal(char* v, char *w) {
+	return QL_Manager::eq_op((void*) (v + lattr.offset), 
+		(void*) (w + rattr.offset),	lattr.attrLength, rattr.attrLength, 
+		lattr.attrType);
+}
+
+///////////////////////////////////////////////////
+// Query tree optimizers
+///////////////////////////////////////////////////
+
+EX_Optimizer::EX_Optimizer(PF_Manager* pfm) {
+	this->pfm = pfm;
+}
+
+EX_Optimizer::~EX_Optimizer() {
+	// nothing to do
+}
+
+void EX_Optimizer::mergeProjections (QL_Op* &root) {
+	// check if the root is a condition openrator with equality attribute
+	if (!root) return;
+	// transform the child tree(s)
+	if (root->opType >= 0) {
+		auto temp = (QL_UnaryOp*) root;
+		mergeProjections(temp->child);
+	}
+	else {
+		auto temp = (QL_BinaryOp*) root;
+		mergeProjections(temp->lchild);
+		mergeProjections(temp->rchild);
+	}
+	if (root->opType != PROJ) return;
+	auto proj = (QL_Projection*) root;
+	if (proj->child->opType != PROJ) return;
+	// the proj node and its child can be merged
+	auto down = (QL_Projection*) proj->child;
+	proj->child = down->child;
+	proj->child->parent = root;
+	proj->inputAttr = proj->child->attributes;
+	proj->position.clear();
+	for (unsigned int i = 0; i < proj->attributes.size(); i++) {
+		DataAttrInfo* dtr = &proj->attributes[i];
+		int idx = QL_Manager::findAttr(dtr->relName, dtr->attrName, 
+			proj->inputAttr);
+		proj->position.push_back((unsigned int) idx);
+	}
+	// detatch the down node and delete it
+	down->child = 0;
+	delete down;
+	mergeProjections(root);
+}
+
+/*	Look for equality attribute conditions over cross product
+	operators and replace cross product by merge join op and push
+	sort between itself and its children. The previous optimization
+	steps ensure that condition operator exists right above the
+	cross product operator
+*/
+void EX_Optimizer::doSortMergeJoin(QL_Op* &root) {
+	if (root->opType < 0) {
+		auto bin = (QL_BinaryOp*) root;
+		doSortMergeJoin(bin->lchild);
+		doSortMergeJoin(bin->rchild);
+	} 
+	else if (root->opType != COND) {
+		auto un = (QL_UnaryOp*) root;
+		doSortMergeJoin(un->child);
+	}
+	else {
+		auto condOp = (QL_Condition*) root;
+		if (condOp->child->opType != REL_CROSS) return;
+		if (!condOp->cond->bRhsIsAttr) return;
+		// at this point, there is a condition operator involving
+		// two attributes, one from each side of the cross product op
+		auto down = (QL_Cross*) condOp->child;
+		// check if the children are worth sorting
+		if (!(okToSort(down->lchild) && okToSort(down->rchild))) return;
+		const Condition* cond = condOp->cond;
+		// put sort operator above the two children
+		int lindex = QL_Manager::findAttr(cond->lhsAttr.relName, 
+						cond->lhsAttr.attrName, down->lchild->attributes);
+		int rindex = QL_Manager::findAttr(cond->rhsAttr.relName, 
+						cond->rhsAttr.attrName, down->rchild->attributes);
+		if (lindex < 0 && rindex < 0) {
+			lindex = QL_Manager::findAttr(cond->rhsAttr.relName, 
+						cond->rhsAttr.attrName, down->lchild->attributes);
+			rindex = QL_Manager::findAttr(cond->lhsAttr.relName, 
+						cond->lhsAttr.attrName, down->rchild->attributes);
+		}
+		QL_Op* lsort = new EX_Sort(pfm, *down->lchild, lindex);
+		QL_Op* rsort = new EX_Sort(pfm, *down->rchild, rindex);
+		// make sorting operators the children of cross op
+		down->lchild = lsort;
+		down->rchild = rsort;
+		lsort->parent = down;
+		rsort->parent = down;
+	}
+	return;
+}
+
+// check if it is worth sorting the output of an operator
+bool EX_Optimizer::okToSort(QL_Op* root) {
+	if (root->opType < 0) return true;
+	if (root->opType == RM_LEAF) return true;
+	if (root->opType == COND) {
+		auto condOp = (QL_Condition*) root;
+		CompOp cmp = condOp->cond->op;
+		return okToSort(condOp->child) && (cmp != EQ_OP);
+	}
+	if (root->opType == PROJ) {
+		auto projOp = (QL_Projection*) root;
+		return okToSort(projOp->child);
+	}
+	return false;
+}
+

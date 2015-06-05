@@ -167,9 +167,9 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     //////////////////////////////////////////////
     // sorting test
     // vector<char> data;
-    EX_Sorter sorter(*(this->rmm->pf_manager), *root, 0);
-    char* fname = "abhinav";
-    cout << "error code " << sorter.sort(fname, 1.0) << endl;
+    // EX_Sorter sorter(*(this->rmm->pf_manager), *root, 0);
+    // char* fname = "abhinav";
+    // cout << "error code " << sorter.sort(fname, 1.0) << endl;
 
     // EX_Scanner escn(*(*this->rmm).pf_manager);
     // char *fileName = "_abhinav.0";
@@ -185,26 +185,40 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 
     ///////////////////////////////////////////////
 
+    EX_Optimizer optimizer((*this->rmm).pf_manager);
 
-    // QL_Optimizer::pushCondition(root);
-    // QL_Optimizer::pushProjection(root);
-    // // print the result
-    // if (bQueryPlans) {
-    //     printPlanHeader("SELECT", " ");
-    //     printOperatorTree(root, 0);
-    //     printPlanFooter();
-    // }
+    QL_Optimizer::pushCondition(root);
+    QL_Optimizer::pushProjection(root);
+    // print the result
+    if (bQueryPlans) {
+        printPlanHeader("SELECT", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    QL_Optimizer::pushCondition(root);
+    optimizer.mergeProjections(root);
+    // optimizer.doSortMergeJoin(root);
+    ///////////////////////////////////////
+    // Sort operator test
+    QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
+    root = sort;
+    if (bQueryPlans) {
+        printPlanHeader("SELECT", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    //////////////////////////////////////
 
-    // vector<char> data;
-    // QL_ErrorForward(root->Open());
-    // DataAttrInfo* attrs = &(root->attributes[0]);
-    // Printer p(attrs, root->attributes.size());
-    // p.PrintHeader(cout);
-    // while (root->Next(data) == OK_RC) {
-    //     p.Print(cout, &data[0]);
-    // }
-    // p.PrintFooter(cout);
-    // SM_ErrorForward(root->Close());
+    vector<char> data;
+    QL_ErrorForward(root->Open());
+    DataAttrInfo* attrs = &(root->attributes[0]);
+    Printer p(attrs, root->attributes.size());
+    p.PrintHeader(cout);
+    while (root->Next(data) == OK_RC) {
+        p.Print(cout, &data[0]);
+    }
+    p.PrintFooter(cout);
+    SM_ErrorForward(root->Close());
     delete root;
     //////////////////////////////////////////////////////////////
     return OK_RC;

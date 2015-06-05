@@ -12,10 +12,10 @@ enum OpType {
 	IX_LEAF = 2,
 	COND = 3,
 	PROJ = 4,
-	SORTED_LEAF = 5,
+	SORT = 5,
 	PERM_DUP = 0,
 	REL_CROSS = -1,
-	REL_JOIN = -2
+	MERGE_JOIN = -2
 };
 
 
@@ -118,6 +118,7 @@ private:
 
 class QL_Condition: public QL_UnaryOp {
 	friend class QL_Optimizer;
+	friend class EX_Optimizer;
 public:
 	QL_Condition(QL_Op &child, const Condition *cond,
 		const std::vector<DataAttrInfo> &attributes);
@@ -127,9 +128,9 @@ public:
 	RC Reset();
 	RC Close();
 	CompOp getOp();
+	const Condition* cond;
 private:
 	bool isOpen;
-	const Condition* cond;
 };
 
 
@@ -139,6 +140,7 @@ private:
 
 class QL_Projection: public QL_UnaryOp {
 	friend class QL_Optimizer;
+	friend class EX_Optimizer;
 public:
 	QL_Projection(QL_Op &child, int nSelAttrs, const RelAttr* selAttrs,
 		const std::vector<DataAttrInfo> &attributes);
@@ -200,6 +202,7 @@ private:
 /////////////////////////////////////////////////////
 
 class QL_Optimizer {
+	friend class EX_Optimizer;
 public:
 	static void pushCondition(QL_Op* &root);
 	static void pushProjection(QL_Op* &root);

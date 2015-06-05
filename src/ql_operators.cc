@@ -225,7 +225,7 @@ QL_Condition::QL_Condition(QL_Op &child, const Condition *cond,
 	opType = COND;
 	desc << "FILTER BY " << cond->lhsAttr << cond->op;
 	if (cond->bRhsIsAttr) {
-		desc << cond->rhsAttr;
+		desc << " " << cond->rhsAttr;
 	} else {
 		desc << cond->rhsValue;
 	}
@@ -620,7 +620,14 @@ void QL_Optimizer::pushCondition(QL_Op* &root) {
 		root = down;
 		if (goRight) pushCondition(down->rchild);
 		else pushCondition(down->lchild);
-	}
+	} 
+	else if (cond->child->opType == PROJ) {
+		auto down = (QL_Projection*) cond->child;
+		swapUnUnOpPointers(cond, down);
+		root = down;
+		cond->attributes = cond->child->attributes;
+		pushCondition(down->child);
+	} 
 	else {
 		return;
 	}
@@ -841,6 +848,6 @@ void printOperatorTree(QL_Op* root, int tabs) {
 		cout << "," << endl;
 		printOperatorTree(temp->rchild, tabs+1);
 		for (int i = 0; i < tabs; i++) cout<<"  ";
-		cout << " } " << endl;
+		cout << "}" << endl;
 	}
 }
