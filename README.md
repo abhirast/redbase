@@ -34,7 +34,16 @@ The query tree optimization in the QL part started with a left leaning operator 
 
 1. Merging Projections - After projections have been pushed down completely, many new projection operators get formed. These projection operators don't affect disk access but they cause redundant data movement. To avoid this, after pushing projections down, conditions are pushed down again so that the projections surface up. Then if successive projections occur together, they are merged.
 
-2. Doing Sort-Merge Join - After conditions have been pushed 
+2. Doing Sort-Merge Join - Pushing conditions down for a second time also ensures that the join conditions will lie right above the corresponding cross product operator. Further the attributes on both sides of the join condition must belong to different children of the cross product operator. Since we don't have database statistics, we make use of simple heuristics to determine if a relation is worth sorting. A recursive procedure has been implemented for the same with the heuristic - if there is any equality based condition lying on the downward path from the node whose output is to be sorted till a binary operator is seen or the end of the path, the node is not worth sorting. If both the children of the cross product operator are worth sorting then a sort operator is inserted between each child and the cross product operator and the cross product operator is converted into the merge operator.
+
+3. Pushing down Sort - In the current implementation, when a sort operator has a RM scan operator as its child, the sorted file is kept around till an insert or delete is done. Any subsequent query which requires sorting based on the same attribute, reads from a sorted file if it exists, otherwise creates a new one. In this case, pushing Sort down is highly desirable so as to make use of the sorted file if it exists or to make one so that it can be used by future queries. Further, range scans on the sorted files are much more efficient than IX scans and more efficient than RM scan if a sorted file already exists. Thus, pushing Sort down makes way for the next step in which RM range scans can be replaced by Sort based range scans.
+
+#### Testing ####
+I tested my implementation on the tests used by the QL part. I also tested my implementation on the ebay dataset provided in CS 145 and matching the counts of output tuples on sqlite. To test the robustness of sort operator, I tested the sorting operator on yelp academic dataset, which has a relation consisting of about 1.5 million tuples. The merge join has also been tested on the yelp dataset involving join of large relations have about 1.5 million output tuples. Memory checks have also been done using valgrind. 
+
+#### Acknowledgements ####
+I would like to thank Jaeho for introducing me to this design in the QL part. The operator tree based implementation helped a lot in coding and debugging this part. I also thank him for valuable inputs during our discussion on design.  
+
 
 
 # ql_DOC #
