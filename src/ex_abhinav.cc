@@ -247,6 +247,7 @@ RC EX_Sorter::sort(const char *fileName, float ff) {
 	vector<char*> pages;
    	vector<int> numrecs;
    	RC rc = fillBuffer(pages, numrecs);
+   	if (pages.size() == 0) return QL_EOF;
    	int chunkNum = 0;
    	queue<int> fileq;
    	while (rc == OK_RC) {
@@ -600,6 +601,7 @@ EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 	this->parent = 0;
 	child.parent = this;
 	isOpen = false;
+	this->isEmpty = false;
 	deleteAtClose = (child.opType != RM_LEAF);
 	if (deleteAtClose) {
 		// generate a unique fileName
@@ -608,7 +610,6 @@ EX_Sort::EX_Sort(PF_Manager* pfm, QL_Op &child, int attrIndex) {
 		while (access(fileName, F_OK) == 0) {
 			gen_random(fileName, 2*MAXNAME);
 		}
-		cout << "fileName " << fileName << endl;
  	} else {
 		// use relname.attrname.sorted
 		fileName = new char[2*MAXNAME + 10];
@@ -641,19 +642,26 @@ EX_Sort::~EX_Sort() {
 */
 RC EX_Sort::Open() {
 	RC WARN = 511, ERR = -511;
+	RC rc = OK_RC;
 	if (deleteAtClose || access(fileName, F_OK) != 0) {
 		// create the sorted file
 		EX_Sorter sorter(*pfm, *child, attrIndex);
-		EX_ErrorForward(sorter.sort(fileName, 1.0));
+		rc = sorter.sort(fileName, 1.0);
+		if (rc != OK_RC && rc != QL_EOF) EX_ErrorForward(rc);
 	}
 	// open the file for scan
-	scanner = new EX_Scanner(*pfm);
-	EX_ErrorForward(scanner->Open(fileName, 0, true, recsize));
+	if (rc == OK_RC) {
+		scanner = new EX_Scanner(*pfm);
+		EX_ErrorForward(scanner->Open(fileName, 0, true, recsize));
+	} else {
+		isEmpty = true;
+	}
 	return OK_RC;
 }
 
 RC EX_Sort::Next(vector<char> &rec) {
 	rec.resize(recsize);
+	if (isEmpty) return QL_EOF;
 	return scanner->Next(rec);
 }
 
@@ -662,10 +670,10 @@ RC EX_Sort::Reset() {
 }
 
 RC EX_Sort::Close() {
+	if (isEmpty) return OK_RC;
 	if (deleteAtClose) {
 		// delete the file
-		RC rc = unlink(fileName);
-		if (rc != 0) return rc;
+		unlink(fileName);
 	}
 	return scanner->Close();
 }
@@ -899,6 +907,7 @@ void EX_Optimizer::mergeProjections (QL_Op* &root) {
 	cross product operator
 */
 void EX_Optimizer::doSortMergeJoin(QL_Op* &root) {
+	if (!root) return;
 	if (root->opType < 0) {
 		auto bin = (QL_BinaryOp*) root;
 		doSortMergeJoin(bin->lchild);

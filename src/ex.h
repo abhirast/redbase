@@ -129,6 +129,7 @@ public:
 	RC Close();
 private:
 	bool isOpen;
+	bool isEmpty;
 	int attrIndex;
 	int recsize;
 	bool deleteAtClose;

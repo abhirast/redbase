@@ -197,16 +197,16 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     }
     QL_Optimizer::pushCondition(root);
     optimizer.mergeProjections(root);
-    // optimizer.doSortMergeJoin(root);
+    optimizer.doSortMergeJoin(root);
     ///////////////////////////////////////
     // Sort operator test
-    QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
-    root = sort;
-    if (bQueryPlans) {
-        printPlanHeader("SELECT", " ");
-        printOperatorTree(root, 0);
-        printPlanFooter();
-    }
+    // QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
+    // root = sort;
+    // if (bQueryPlans) {
+    //     printPlanHeader("SELECT", " ");
+    //     printOperatorTree(root, 0);
+    //     printPlanFooter();
+    // }
     //////////////////////////////////////
 
     vector<char> data;
@@ -271,6 +271,16 @@ RC QL_Manager::Insert(const char *relName,
         QL_ErrorForward(ihandles[ind[i]].InsertEntry( (void*) 
             (buffer + attributes[ind[i]].offset), record_rid));
     }
+    ////////////////////////////////////////////////////////////
+    // delete the sorted files
+        char fname[2*MAXNAME + 10];
+        for (int i = 0; i < attributes.size(); i++) {
+            sprintf(fname, "%s.%s.sorted", attributes[i].relName, 
+            attributes[i].attrName);
+            if (access(fname, F_OK) == 0) unlink(fname);
+        }
+    ///////////////////////////////////////////////////////////
+    
     // close the relation and index files
     SM_ErrorForward(rmm->CloseFile(relh));
     for (size_t i = 0; i < ind.size(); i++) {
@@ -416,11 +426,20 @@ RC QL_Manager::Delete(const char *relName,
         }
     }
     p.PrintFooter(cout);
-    SM_ErrorForward(scanner->Close());
+    ////////////////////////////////////////////////////////////
+    // delete the sorted files
+    char fname[2*MAXNAME + 10];
+    for (int i = 0; i < attributes.size(); i++) {
+        sprintf(fname, "%s.%s.sorted", attributes[i].relName, 
+        attributes[i].attrName);
+        if (access(fname, F_OK) == 0) unlink(fname);
+    }
+    ///////////////////////////////////////////////////////////
+    QL_ErrorForward(scanner->Close());
     // close the relation and index files
-    SM_ErrorForward(rmm->CloseFile(relh));
+    QL_ErrorForward(rmm->CloseFile(relh));
     for (size_t i = 0; i < ind.size(); i++) {
-        SM_ErrorForward(ixm->CloseIndex(ihandles[ind[i]]));
+        QL_ErrorForward(ixm->CloseIndex(ihandles[ind[i]]));
     }
     return OK_RC;
 }
