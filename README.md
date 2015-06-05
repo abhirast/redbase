@@ -1,3 +1,34 @@
+# ex_DOC #
+
+#### Overview ####
+This part primarily focuses on query optimization using an external sort operator. The external sort operator has been designed by keeping in mind that it can be used by as many database operations as possible. The sorting operator provides functionality to build a sorted file with a given fill factor. Further, clients can specify whether to keep the sorted file or delete it after iterating through it. 
+
+A different file scanner has also been implemented for sorted files which allows directional scans (i.e, both ascending and descending order) starting from a specific page of the sorted file. The scanner also allows page wise scans. Using the sorting operator, merge join algorithm has been implemented. Some operator tree optimization methods have also been written to make query execution more efficient.
+
+#### External Sorting ####
+Quick-sort without an  initial random shuffle has been used for external sorting since it is a in-place algorithm. The external sorting algorithm is as follows-
+
+1. Determine the number of buffer pages available for sorting. This is the total number of buffer pages minus the number of relations present as the child of the operator which has to be sorted.
+2. Read tuples from the relation and put them in the available buffer pages.
+3. Sort each buffer page using quick sort. 
+4. Merge the sorted buffer pages and write the result to a chunk file on the disk with a fill factor of 1. 
+5. Repeat steps 2 to 4 till the relation gets exhausted.
+6. While the number of chunks in the queue is greater than 1, do steps 7 to 9.
+7. Load the first page of first B-1 relations from the queue in the buffer pages, where B is the total number of buffer pages. Merge these pages and write the result to another sorted file. If the number of chunks in the queue is greater than B then a fill factor of 1 is used, otherwise the new chunk is created with the specified fill factor.
+8. If a page gets exhausted during the merge, another page is read from the same sorted chunk if available. 
+9. Delete the chunk files after the new chunk has been created. Put the new chunk in the queue.
+10. Rename the last chunk to the file name given by the client. This is the output sorted relation
+
+#### Sort Merge Join ####
+Sort Merge join is implemented by a combination of two unary sorting operators and a binary merge operator. The merge operator assumes that the tuple stream coming from its children are sorted in ascending order in the join attribute. This separation of operators allows us to do more efficient query optimization, details of which are given in the next section.
+For the merge operator, the bottleneck occurs when successive tuples in the stream arriving from one of its children (say right) have the same join key. Consider the case given below, where the join key in the tuple stream from left and right child has been listed. 
+left:  1 2 2 3 4
+right: 0 2 2 2 2 2 2 2 2 5
+As soon as we encounter the second occurrence of 2 in the left stream, we need to "go back" in the right stream to retrieve the tuples. Since the operators have been implemented as forward iterators, this is not possible. So in this case, pages from the buffer pool have been used to store the duplicate tuples in the right stream. If the same join key is encountered in the next tuple of the left stream, the tuple is joined with all the tuples in the buffer. A class BufferIterator has been implemented to easily carry out this job, which converts the buffer pool into a random access iterator over the tuples.
+
+#### Query Optimization ####
+
+
 # ql_DOC #
 
 #### Overview ####
