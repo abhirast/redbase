@@ -29,8 +29,12 @@ right: 0 2 2 2 2 2 2 2 2 5
 As soon as we encounter the second occurrence of 2 in the left stream, we need to "go back" in the right stream to retrieve the tuples. Since the operators have been implemented as forward iterators, this is not possible. So in this case, pages from the buffer pool have been used to store the duplicate tuples in the right stream. If the same join key is encountered in the next tuple of the left stream, the tuple is joined with all the tuples in the buffer. A class BufferIterator has been implemented to easily carry out this job, which converts the buffer pool into a random access iterator over the tuples.
 
 #### Query Optimization ####
-The query tree optimization in the QL part started with a 
+The query tree optimization in the QL part started with a left leaning operator tree consisting of file scan as leaves and cross product operators as internal nodes. After that a condition node corresponding to each condition was places above the root node, then a projection operator followed by a permute/duplicate operator. Pushing the conditions followed by pushing the projections down the tree achieved substantial gain in performance. In this part, three optimization functions have been implemented. The current optimization sequence, of which, the first two steps were implemented in QL part, is as follows-
+(i) Push Conditions (ii) Push Projections (iii) Push Conditions (iv) Merge Projections (v) Introduce Sort Merge join (vi) Push Sorts
 
+1. Merging Projections - After projections have been pushed down completely, many new projection operators get formed. These projection operators don't affect disk access but they cause redundant data movement. To avoid this, after pushing projections down, conditions are pushed down again so that the projections surface up. Then if successive projections occur together, they are merged.
+
+2. Doing Sort-Merge Join - After conditions have been pushed 
 
 
 # ql_DOC #
