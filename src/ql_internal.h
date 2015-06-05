@@ -100,6 +100,7 @@ public:
 	RC Close();
 private:
 	std::string relName;
+	bool seenEOF;
 	int indexNo;
 	RM_Manager *rmm;
 	IX_Manager *ixm;

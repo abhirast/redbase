@@ -130,6 +130,7 @@ QL_IndexScan::QL_IndexScan(RM_Manager *rmm, IX_Manager *ixm,
 	this->attributes = attributes;
 	this->indexNo = attributes[attrIndex].indexNo;
 	isOpen = false;
+	seenEOF = false;
 	child = 0;
 	parent = 0;
 	opType = IX_LEAF;
@@ -145,14 +146,15 @@ RC QL_IndexScan::Open() {
 	if (isOpen) return WARN;
 	QL_ErrorForward(rmm->OpenFile(relName.c_str(), fh));
 	QL_ErrorForward(ixm->OpenIndex(relName.c_str(), indexNo, ih));
-	QL_ErrorForward(is.OpenScan(ih, cmp, value, hint));
+	RC rc = is.OpenScan(ih, cmp, value, hint);
+	if (rc != OK_RC) seenEOF = true;
 	isOpen = true;
 	return OK_RC;
 }
 
 RC QL_IndexScan::Next(vector<char> &rec) {
 	RC WARN = QL_EOF, ERR = QL_IXSCAN_ERR;
-	if (!isOpen) return WARN;
+	if (!isOpen || seenEOF) return WARN;
 	RID rid;
 	RM_Record record;
 	char *temp;
@@ -167,7 +169,7 @@ RC QL_IndexScan::Next(vector<char> &rec) {
 
 RC QL_IndexScan::Next(vector<char> &rec, RID &rid) {
 	RC WARN = QL_EOF, ERR = QL_IXSCAN_ERR;
-	if (!isOpen) return WARN;
+	if (!isOpen || seenEOF) return WARN;
 	RM_Record record;
 	char *temp;
 	rec.resize(attributes.back().offset + attributes.back().attrLength, 0);
@@ -183,7 +185,8 @@ RC QL_IndexScan::Reset() {
 	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
 	QL_ErrorForward(is.CloseScan());
-	QL_ErrorForward(is.OpenScan(ih, cmp, value, hint));
+	RC rc = is.OpenScan(ih, cmp, value, hint);
+	if (rc != OK_RC) seenEOF = true;
 	return OK_RC;
 }
 
@@ -192,14 +195,15 @@ RC QL_IndexScan::Reset(void *value) {
 	if (!isOpen) return WARN;
 	this->value = value;
 	QL_ErrorForward(is.CloseScan());
-	QL_ErrorForward(is.OpenScan(ih, cmp, value, hint));
+	RC rc = is.OpenScan(ih, cmp, value, hint);
+	if (rc != OK_RC) seenEOF = true;
 	return OK_RC;
 }
 
 RC QL_IndexScan::Close() {
 	RC WARN = QL_IXSCAN_WARN, ERR = QL_IXSCAN_ERR;
 	if (!isOpen) return WARN;
-	QL_ErrorForward(is.CloseScan());
+	if (!seenEOF) QL_ErrorForward(is.CloseScan());
 	QL_ErrorForward(ixm->CloseIndex(ih));
 	QL_ErrorForward(rmm->CloseFile(fh));
 	isOpen = false;

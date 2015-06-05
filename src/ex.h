@@ -21,7 +21,8 @@ class EX_Loader {
 public:
 	EX_Loader(PF_Manager &pfm);
 	~EX_Loader();
-	RC Create(char *fileName, float ff, int recsize);
+	RC Create(char *fileName, float ff, int recsize, bool makeIndex, 
+														int attrLength);
 	RC PutRec(char* data);
 	RC Close();
 private:
@@ -29,10 +30,13 @@ private:
 	float ff;
 	PF_FileHandle fh;
 	bool isOpen;
+	bool makeIndex;
+	int attrLength;
 	int recsize;
 	int currPage;
 	int recsInCurrPage;
 	int capacity;
+	EX_Loader* index;
 };
 
 // reads from a file created by loader
@@ -65,7 +69,7 @@ class EX_Sorter {
 public:
 	EX_Sorter(PF_Manager &pfm, QL_Op &scan, int attrIndex);
 	~EX_Sorter();
-	RC sort(const char *fileName, float ff);
+	RC sort(const char *fileName, float ff, bool makeIndex);
 private:
 	PF_Manager *pfm;
 	QL_Op *scan;
@@ -120,6 +124,7 @@ private:
 /////////////////////////////////////////////////////
 
 class EX_Sort: public QL_UnaryOp {
+	friend class EX_Optimizer;
 public:
 	EX_Sort(PF_Manager *pfm, QL_Op &child, int attrIndex);
 	~EX_Sort();
@@ -175,6 +180,7 @@ public:
 	EX_Optimizer(PF_Manager *pfm);
 	~EX_Optimizer();
 	void doSortMergeJoin(QL_Op* &root);
+	void pushSort(QL_Op* &root);
 	void doSortedScans(QL_Op* &root);
 	void mergeProjections(QL_Op* &root);
 private:

@@ -58,7 +58,8 @@ EX_Loader::~EX_Loader() {
 	// nothing to be done
 }
 
-RC EX_Loader::Create(char *fileName, float ff, int recsize) {
+RC EX_Loader::Create(char *fileName, float ff, int recsize, 
+		bool makeIndex, int attrLength) {
 	RC WARN = 504, ERR = -504;
 	if (isOpen) return WARN;
 	this->ff = ff;
@@ -68,8 +69,20 @@ RC EX_Loader::Create(char *fileName, float ff, int recsize) {
 	EX_ErrorForward(pfm->CreateFile(fileName));
 	EX_ErrorForward(pfm->OpenFile(fileName, fh));
 	isOpen = true;
+	this->makeIndex = makeIndex;
+	this->attrLength = attrLength;
 	currPage = 0;
 	recsInCurrPage = 0;
+	// create a new file for index if makeIndex is true
+	char indFile[3*MAXNAME + 10];
+	sprintf(indFile, "%s.idx", fileName);
+	// cout << "Making an index " << makeIndex << endl;
+	// if (makeIndex) {
+	// 	this->index = new EX_Loader(*pfm);
+	// 	index->Create(indFile, 1.0, attrLength + sizeof(int), 
+	// 					false, 0);
+	// 	index->Close();
+	// }
 	return OK_RC;
 }
 
@@ -240,7 +253,7 @@ EX_Sorter::~EX_Sorter() {
 	delete[] buffer;
 }
 
-RC EX_Sorter::sort(const char *fileName, float ff) {
+RC EX_Sorter::sort(const char *fileName, float ff, bool makeIndex) {
 	RC WARN = 501, ERR = -501;
    	// open the scan
 	EX_ErrorForward(scan->Open());
@@ -298,7 +311,8 @@ RC EX_Sorter::sort(const char *fileName, float ff) {
 		fileq.push(chunkNum);
 		chunkNum++;
 		float fillFactor = (qsize > buffSize) ? 1.0 : ff;
-		EX_ErrorForward(loader.Create(temp, fillFactor, recsize));
+		EX_ErrorForward(loader.Create(temp, fillFactor, recsize, 
+							makeIndex && qsize <= buffSize, attrLength));
 		vector<int> index(scanners.size(), 0);
 		unsigned int exhaustedCount = 0;
 		RC rc;
@@ -518,7 +532,7 @@ RC EX_Sorter::createSortedChunk(const char *fileName, int chunkNum, float ff,
 	EX_Loader loader(*pfm);
 	vector<char> fname(3*MAXNAME);
 	sprintf(&fname[0], "_%s.%d", fileName, chunkNum);
-	EX_ErrorForward(loader.Create(&fname[0], ff, recsize));
+	EX_ErrorForward(loader.Create(&fname[0], ff, recsize, false, 0));
 	vector<int> index(pages.size(), 0);
 	int idx = findIndex(pages, numrecs, index);
 	while (idx >= 0) {
@@ -646,7 +660,7 @@ RC EX_Sort::Open() {
 	if (deleteAtClose || access(fileName, F_OK) != 0) {
 		// create the sorted file
 		EX_Sorter sorter(*pfm, *child, attrIndex);
-		rc = sorter.sort(fileName, 1.0);
+		rc = sorter.sort(fileName, 1.0, !deleteAtClose);
 		if (rc != OK_RC && rc != QL_EOF) EX_ErrorForward(rc);
 	}
 	// open the file for scan
@@ -901,6 +915,54 @@ void EX_Optimizer::mergeProjections (QL_Op* &root) {
 	down->child = 0;
 	delete down;
 	mergeProjections(root);
+}
+
+
+void EX_Optimizer::pushSort(QL_Op* &root) {
+	if (!root) return;
+	if (root->opType < 0) {
+		auto bin = (QL_BinaryOp*) root;
+		pushSort(bin->lchild);
+		pushSort(bin->rchild);
+	} else {
+		auto uop = (QL_UnaryOp*) root;
+		pushSort(uop->child);
+	}
+	if (root->opType != SORT) return;
+	auto sort = (EX_Sort*) root;
+	if (sort->child->opType == PROJ) {
+		auto down = (QL_Projection*) sort->child;
+		DataAttrInfo attr = sort->attributes[sort->attrIndex];
+		int idx = QL_Manager::findAttr(attr.relName, attr.attrName,
+			down->child->attributes);
+		QL_Op* newsort = new EX_Sort(sort->pfm, *down->child, idx);
+		newsort->parent = down;
+		down->child = newsort;
+		if (root->parent) {
+			if (root->parent->opType >= 0) {
+				// its a unary op
+				auto uop = (QL_UnaryOp*) root->parent;
+				uop->child = down;
+			} 
+			else if (root->parent->opType < 0) {
+				auto bop = (QL_BinaryOp*) root->parent;
+				if (bop->lchild == root) bop->lchild = down;
+				if (bop->rchild == root) bop->rchild = down;
+			}	
+		}
+		down->parent = root->parent;
+		root = down;
+		sort->child = 0;
+		delete sort;
+		pushSort(down->child);
+	} else if (sort->child->opType == COND) {
+		auto down = (QL_Condition*) sort->child;
+		QL_Optimizer::swapUnUnOpPointers(sort, down);
+		root = down;
+		pushSort(down->child);
+	} else {
+		return;
+	}
 }
 
 /*	Look for equality attribute conditions over cross product

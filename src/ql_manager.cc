@@ -198,6 +198,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     QL_Optimizer::pushCondition(root);
     optimizer.mergeProjections(root);
     optimizer.doSortMergeJoin(root);
+    optimizer.pushSort(root);
     ///////////////////////////////////////
     // Sort operator test
     // QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
@@ -274,7 +275,7 @@ RC QL_Manager::Insert(const char *relName,
     ////////////////////////////////////////////////////////////
     // delete the sorted files
         char fname[2*MAXNAME + 10];
-        for (int i = 0; i < attributes.size(); i++) {
+        for (unsigned int i = 0; i < attributes.size(); i++) {
             sprintf(fname, "%s.%s.sorted", attributes[i].relName, 
             attributes[i].attrName);
             if (access(fname, F_OK) == 0) unlink(fname);
@@ -429,7 +430,7 @@ RC QL_Manager::Delete(const char *relName,
     ////////////////////////////////////////////////////////////
     // delete the sorted files
     char fname[2*MAXNAME + 10];
-    for (int i = 0; i < attributes.size(); i++) {
+    for (unsigned int i = 0; i < attributes.size(); i++) {
         sprintf(fname, "%s.%s.sorted", attributes[i].relName, 
         attributes[i].attrName);
         if (access(fname, F_OK) == 0) unlink(fname);
