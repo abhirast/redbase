@@ -769,6 +769,18 @@ RC EX_MergeJoin::Next(vector<char> &rec) {
 		rightrec.resize(rightRecSize);
 		EX_ErrorForward(rchild->Next(rightrec));	
 	}
+	if (bufferIndex == buffit->Size() && bufferIndex > 0) {
+		RC rc = lchild->Next(leftrec);
+		if (rc != OK_RC) {
+			EX_ErrorForward(buffit->Clear()); 
+			return rc; 
+		}
+		bufferIndex = 0;
+		// clear the buffer if the new record doesn't fit join criteria
+		if (!equal(&leftrec[0], buffit->GetRec(0))) {
+			EX_ErrorForward(buffit->Clear());
+		}
+	}
 	// if buffer is not empty
 	if (buffit->Size() > 0) {
 		// join with the record at bufferIdx
@@ -776,18 +788,6 @@ RC EX_MergeJoin::Next(vector<char> &rec) {
 		memcpy(&rec[0], &leftrec[0], leftRecSize);
 		memcpy(&rec[leftRecSize], buffit->GetRec(bufferIndex), rightRecSize);
 		bufferIndex++;
-		if (bufferIndex == buffit->Size()) {
-			RC rc = lchild->Next(leftrec);
-			if (rc != OK_RC) {
-				EX_ErrorForward(buffit->Clear()); 
-				return OK_RC; 
-			}
-			bufferIndex = 0;
-			// clear the buffer if the new record doesn't fit join criteria
-			if (!equal(&leftrec[0], buffit->GetRec(0))) {
-				EX_ErrorForward(buffit->Clear());
-			}
-		}
 		return OK_RC;
 	}
 	if (rightEOF) return QL_EOF;
@@ -799,10 +799,13 @@ RC EX_MergeJoin::Next(vector<char> &rec) {
 			EX_ErrorForward(rchild->Next(rightrec));
 		} else {
 			// fill buffer with right page
+			RC rc;
 			do {
 				EX_ErrorForward(buffit->PutRec(rightrec));
-				EX_ErrorForward(rchild->Next(rightrec));
-			} while (equal(&leftrec[0], &rightrec[0]));
+				rc = rchild->Next(rightrec);
+			} while (rc == OK_RC && equal(&leftrec[0], &rightrec[0]));
+			if (rc == QL_EOF) rightEOF = true;
+			else if (rc != OK_RC) return rc;
 			// output join with the first record in buffer
 			rec.resize(leftRecSize + rightRecSize);
 			memcpy(&rec[0], &leftrec[0], leftRecSize);
@@ -940,11 +943,12 @@ void EX_Optimizer::doSortMergeJoin(QL_Op* &root) {
 		}
 		QL_Op* lsort = new EX_Sort(pfm, *down->lchild, lindex);
 		QL_Op* rsort = new EX_Sort(pfm, *down->rchild, rindex);
-		// make sorting operators the children of cross op
-		down->lchild = lsort;
-		down->rchild = rsort;
-		lsort->parent = down;
-		rsort->parent = down;
+		QL_Op* merge = new EX_MergeJoin(pfm, *lsort, *rsort, cond);
+		merge->parent = root;
+		condOp->child = merge;
+		down->lchild = 0;
+		down->rchild = 0;
+		delete down;
 	}
 	return;
 }

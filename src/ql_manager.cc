@@ -202,11 +202,11 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     // Sort operator test
     // QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
     // root = sort;
-    // if (bQueryPlans) {
-    //     printPlanHeader("SELECT", " ");
-    //     printOperatorTree(root, 0);
-    //     printPlanFooter();
-    // }
+    if (bQueryPlans) {
+        printPlanHeader("SELECT", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
     //////////////////////////////////////
 
     vector<char> data;
