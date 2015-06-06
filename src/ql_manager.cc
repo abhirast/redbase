@@ -163,53 +163,83 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     *************************************/
     QL_Op* root = opTree.back();
     
-
-    //////////////////////////////////////////////
-    // sorting test
-    // vector<char> data;
-    // EX_Sorter sorter(*(this->rmm->pf_manager), *root, 0);
-    // char* fname = "abhinav";
-    // cout << "error code " << sorter.sort(fname, 1.0) << endl;
-
-    // EX_Scanner escn(*(*this->rmm).pf_manager);
-    // char *fileName = "_abhinav.0";
-    // escn.Open(fileName, 0, true, 154);
-    // DataAttrInfo* attrs = &(root->attributes[0]);
-    // Printer p(attrs, root->attributes.size());
-    // p.PrintHeader(cout);
-    // while (escn.Next(data) == OK_RC) {
-    //     p.Print(cout, &data[0]);
-    // }
-    // p.PrintFooter(cout);
-    
-
-    ///////////////////////////////////////////////
-
     EX_Optimizer optimizer((*this->rmm).pf_manager);
-
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : Raw plan", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    // Step 1 - Push Conditions
     QL_Optimizer::pushCondition(root);
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After pushing conditions", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    // Step 2 - Push Projection
     QL_Optimizer::pushProjection(root);
-    // print the result
-    if (bQueryPlans) {
-        printPlanHeader("SELECT", " ");
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After pushing projections", " ");
         printOperatorTree(root, 0);
         printPlanFooter();
     }
+    // Step 3 - Push Condition
     QL_Optimizer::pushCondition(root);
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After pushing conditions again", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    // Step 4 - Merge Projections
     optimizer.mergeProjections(root);
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After merging projections", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    // Step 5 - Do sort merge join
     optimizer.doSortMergeJoin(root);
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After sort merge join", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    // Step 6 - Push Sort
     optimizer.pushSort(root);
-    ///////////////////////////////////////
-    // Sort operator test
-    // QL_Op* sort = new EX_Sort((*this->rmm).pf_manager, *root, 0);
-    // root = sort;
-    if (bQueryPlans) {
+
+    // print the query plan
+    if (smm->SHOW_ALL_PLANS) {
+        printPlanHeader("SELECT : After pushing sort", " ");
+        printOperatorTree(root, 0);
+        printPlanFooter();
+    }
+    else if (bQueryPlans) {
         printPlanHeader("SELECT", " ");
         printOperatorTree(root, 0);
         printPlanFooter();
     }
-    //////////////////////////////////////
 
+    // if (smm->SORT_RES > 0) {
+    //     // sorting test
+    //     vector<char> data;
+    //     EX_Sorter sorter(*(this->rmm->pf_manager), *root, 0);
+    //     char* fname = "abhinav";
+    //     cout << "error code " << sorter.sort(fname, 1.0) << endl;
+
+    //     EX_Scanner escn(*(*this->rmm).pf_manager);
+    //     char *fileName = "_abhinav.0";
+    //     if ()
+    //     escn.Open(fileName, 0, true, 154);
+    //     DataAttrInfo* attrs = &(root->attributes[0]);
+    //     Printer p(attrs, root->attributes.size());
+    //     p.PrintHeader(cout);
+    //     while (escn.Next(data) == OK_RC) {
+    //         p.Print(cout, &data[0]);
+    //     }
+    //     p.PrintFooter(cout);
+    // }
+
+    // print the tuples
     vector<char> data;
     QL_ErrorForward(root->Open());
     DataAttrInfo* attrs = &(root->attributes[0]);
@@ -221,7 +251,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     p.PrintFooter(cout);
     SM_ErrorForward(root->Close());
     delete root;
-    //////////////////////////////////////////////////////////////
+    
     return OK_RC;
 }
 
@@ -839,8 +869,10 @@ int QL_Manager::findAttr(const char* relName, const char* attrName,
 }
 
 void QL_Manager::printPlanHeader(const char* operation, const char* relname) {
-    cout << "********************************************\n";
-    cout << "Query Execution Plan" << endl;
+    if (!smm->SHOW_ALL_PLANS) {
+        cout << "********************************************\n";
+        cout << "Query Execution Plan" << endl;
+    }
     cout << "-----------------------\n";
     cout << "Operation: " << operation << " " << relname << endl;
     cout << "-----------------------\n";
@@ -848,5 +880,6 @@ void QL_Manager::printPlanHeader(const char* operation, const char* relname) {
 
 
 void QL_Manager::printPlanFooter() {
+    if (!smm->SHOW_ALL_PLANS)
     cout << "\n********************************************\n\n";
 }

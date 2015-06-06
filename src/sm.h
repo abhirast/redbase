@@ -74,6 +74,8 @@ private:
                 DataAttrInfo &dinfo, RM_Record &rec); 
     RC getAttributes(const char *relName, std::vector<DataAttrInfo> &attributes);
     RC getRelation(const char* relName, RelationInfo &relation);
+    bool SHOW_ALL_PLANS;
+    int SORT_RES;
 };
 
 //

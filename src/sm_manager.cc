@@ -18,6 +18,8 @@ SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm) {
     ixman = &ixm;
     rmman = &rmm;
     isOpen = false;
+    SHOW_ALL_PLANS = false;
+    SORT_RES = 0;
 }
 
 SM_Manager::~SM_Manager() {
@@ -26,6 +28,36 @@ SM_Manager::~SM_Manager() {
         rmman->CloseFile(attrcat);
     }
 }
+
+RC SM_Manager::Set(const char *paramName, const char *value) {
+    if (strcmp(paramName, "allplans") == 0 && strcmp(value, "1") == 0) {
+        SHOW_ALL_PLANS = true;
+        cout << "Will show all intermediate plans" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "allplans") == 0 && strcmp(value, "0") == 0) {
+        SHOW_ALL_PLANS = false;
+        cout << "Will not show all plans" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "2") == 0) {
+        SORT_RES = 2;
+        cout << "Will sort all resuls descending" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "1") == 0) {
+        SORT_RES = 1;
+        cout << "Will sort all resuls ascending" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "0") == 0) {
+        SORT_RES = 0;
+        cout << "Will not sort all results" << endl;
+        return OK_RC;
+    }
+    return SM_NOT_IMPLEMENTED;
+}
+
 
 /* Steps - 
     1. Change the directory to the directory defined by dbName. Will
@@ -431,9 +463,6 @@ RC SM_Manager::Print(const char *relName) {
     return OK_RC;
 }
 
-RC SM_Manager::Set(const char *paramName, const char *value) {
-    return SM_NOT_IMPLEMENTED;
-}
 
 RC SM_Manager::Help() {
     RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
