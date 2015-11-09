@@ -1,3 +1,170 @@
+# ex_DOC #
+
+#### Overview ####
+This part primarily focuses on query optimization using an external sort operator. The external sort operator has been designed by keeping in mind that it can be used by as many database operations as possible. The sorting operator provides functionality to build a sorted file with a given fill factor. Further, clients can specify whether to keep the sorted file or delete it after iterating through it. 
+
+A different file scanner has also been implemented for sorted files which allows directional scans (i.e, both ascending and descending order) starting from a specific page of the sorted file. The scanner also allows page wise scans. Using the sorting operator, merge join algorithm has been implemented. Some operator tree optimization methods have also been written to make query execution more efficient.
+
+#### External Sorting ####
+Quick-sort without an  initial random shuffle has been used for external sorting since it is a in-place algorithm. The external sorting algorithm is as follows-
+
+1. Determine the number of buffer pages available for sorting. This is the total number of buffer pages minus the number of relations present as the child of the operator which has to be sorted.
+2. Read tuples from the relation and put them in the available buffer pages.
+3. Sort each buffer page using quick sort. 
+4. Merge the sorted buffer pages and write the result to a chunk file on the disk with a fill factor of 1. 
+5. Repeat steps 2 to 4 till the relation gets exhausted.
+6. While the number of chunks in the queue is greater than 1, do steps 7 to 9.
+7. Load the first page of first B-1 relations from the queue in the buffer pages, where B is the total number of buffer pages. Merge these pages and write the result to another sorted file. If the number of chunks in the queue is greater than B then a fill factor of 1 is used, otherwise the new chunk is created with the specified fill factor.
+8. If a page gets exhausted during the merge, another page is read from the same sorted chunk if available. 
+9. Delete the chunk files after the new chunk has been created. Put the new chunk in the queue.
+10. Rename the last chunk to the file name given by the client. This is the output sorted relation
+
+#### Sort Merge Join ####
+Sort Merge join is implemented by a combination of two unary sorting operators and a binary merge operator. The merge operator assumes that the tuple stream coming from its children are sorted in ascending order in the join attribute. This separation of operators allows us to do more efficient query optimization, details of which are given in the next section.
+For the merge operator, the bottleneck occurs when successive tuples in the stream arriving from one of its children (say right) have the same join key. Consider the case given below, where the join key in the tuple stream from left and right child has been listed. 
+~~~~
+left:  1 2 2 3 4 
+right: 0 2 2 2 2 2 2 2 2 5 
+~~~~
+As soon as we encounter the second occurrence of 2 in the left stream, we need to "go back" in the right stream to retrieve the tuples. Since the operators have been implemented as forward iterators, this is not possible. So in this case, pages from the buffer pool have been used to store the duplicate tuples in the right stream. If the same join key is encountered in the next tuple of the left stream, the tuple is joined with all the tuples in the buffer. A class BufferIterator has been implemented to easily carry out this job, which converts the buffer pool into a random access iterator over the tuples.
+
+#### Query Optimization ####
+The query tree optimization in the QL part started with a left leaning operator tree consisting of file scan as leaves and cross product operators as internal nodes. After that a condition node corresponding to each condition was places above the root node, then a projection operator followed by a permute/duplicate operator. Pushing the conditions followed by pushing the projections down the tree achieved substantial gain in performance. In this part, three optimization functions have been implemented. The current optimization sequence, of which, the first two steps were implemented in QL part, is as follows-
+(i) Push Conditions (ii) Push Projections (iii) Push Conditions (iv) Merge Projections (v) Introduce Sort Merge join (vi) Push Sorts
+
+1. Merging Projections - After projections have been pushed down completely, many new projection operators get formed. These projection operators don't affect disk access but they cause redundant data movement. To avoid this, after pushing projections down, conditions are pushed down again so that the projections surface up. Then if successive projections occur together, they are merged.
+
+2. Doing Sort-Merge Join - Pushing conditions down for a second time also ensures that the join conditions will lie right above the corresponding cross product operator. Further the attributes on both sides of the join condition must belong to different children of the cross product operator. Since we don't have database statistics, we make use of simple heuristics to determine if a relation is worth sorting. A recursive procedure has been implemented for the same with the heuristic - if there is any equality based condition lying on the downward path from the node whose output is to be sorted till a binary operator is seen or the end of the path, the node is not worth sorting. If both the children of the cross product operator are worth sorting then a sort operator is inserted between each child and the cross product operator and the cross product operator is converted into the merge operator.
+
+3. Pushing down Sort - In the current implementation, when a sort operator has a RM scan operator as its child, the sorted file is kept around till an insert or delete is done. Any subsequent query which requires sorting based on the same attribute, reads from a sorted file if it exists, otherwise creates a new one. In this case, pushing Sort down is highly desirable so as to make use of the sorted file if it exists or to make one so that it can be used by future queries. Further, range scans on the sorted files are much more efficient than IX scans and more efficient than RM scan if a sorted file already exists. Thus, pushing Sort down makes way for the next step in which RM range scans can be replaced by Sort based range scans.
+
+#### Testing ####
+I tested my implementation on the tests used by the QL part. I also tested my implementation on the ebay dataset provided in CS 145 and matching the counts of output tuples on sqlite. To test the robustness of sort operator, I tested the sorting operator on yelp academic dataset, which has a relation consisting of about 1.5 million tuples. The merge join has also been tested on the yelp dataset involving join of large relations have about 1.5 million output tuples. Memory checks have also been done using valgrind. 
+
+#### Acknowledgements ####
+I would like to thank Jaeho for introducing me to this design in the QL part. The operator tree based implementation helped a lot in coding and debugging this part. I also thank him for valuable inputs during our discussion on design.  
+
+
+
+# ql_DOC #
+
+#### Overview ####
+This part provides the core database functionality to redbase. Internally, the Query Language (QL) module takes in the inputs from the command line parser and interacts with the other modules - PF, RM, IX and SM to execute the tasks demanded by the user. Planning the execution of a general database query in the most efficient way is quite challenging. In this implementation, many simplifications have been made to restrict the search space of the possible query execution plans.
+
+#### Code structure ####
+An iterator approach has been used in this implementation. Various atomic operators have been defined corresponding to the various simple database operations. These operators belong to a class hierarchy. The base operator class is QL_Op, which is an abstract class which provides a common interface to all the operators. Each operator has 4 functions- (i) Open, (ii) Next, (iii) Reset and (iv) Close. Each operator also stores the schema of its output, which includes the relation name, attribute name, attribute offsets, attribute lengths and index number of each attribute. These operators are then chained together in a tree like fashion as described below.
+
+The operators are broadly divided into two categories - (a) Unary operators and (b) Binary operators. The unary operators take the input from a single operator or none of the operators (file scan operators) whereas the binary operators take input from two other operators and combine them to produce their output. There are two separate abstract classes- QL_UnaryOp and QL_BinaryOp, extending the QL_Op base class to make this distinction. This abstraction is very convenient because the functionality can be easily extended by defining more operators which implement one of these classes.
+
+The unary operators store a pointer to its child, which can be null in case of leaf nodes and the binary operators store a pointer for each of its two children. Each operator also stores a pointer to its parent node (null in case of root). The parent pointer makes the tree transformations very convenient. In the current implementation, five unary operators corresponding to (i) Condition checking, (ii) Projection, (iii) File Scan (iv) Index Scan (v) Permutation/Duplication of attributes have been implemented. One binary operator for Cross product has also been implemented.
+
+#### Initial Query Plan ####
+If we have N relations in our query, there are N! possible orderings of them. Besides the presence of selection and projection conditions make the search space really large. In this implementation, no attempt has been made to reorder the relations. Consider a general select query-
+~~~~
+select A1, A2 ... Am from R1, R2, ... Rn where C1, C2, ... Ck;
+~~~~
+where A1, A2 etc are the various attributes, R1, R2 etc are different relations and C1, C2 etc are the conditions involving attributes or constants in any of the given relations. After checking the validity of the query which includes validating the names of each input, checking for ambiguous attribute names, type consistency etc, a simple query tree is designed. This tree consists of a left leaning binary tree having file scan operators, one for each relation at its leaf and cross product operator at each non-leaf node. Then one operator corresponding to each condition is added above the root. After that, if the query doesn't have "*" in the select clause then a projection operator is placed above the new root, which projects the given attributes from the giant cross product of the relations. Further, if the attributes in the select clause differ from the natural ordering imposed by the relations in the from clause and the attributes within these relations, then a permutation operator is defined above the root. This operator also identifies the duplicates in the select clause and hence duplicates the attributes appropriately.
+
+Let us take a simple example to visualize this. Let R(a,b,c), S(b,c,d) and T(c,d,e) be three relations. The attribute e of T is indexed. Consider the query - 
+~~~~
+select T.e, S.b, S.d from R, S, T where R.b = S.b and R.c = 1 and T.e = 3;
+~~~~
+The initial query plan is as follows-
+~~~~
+PERMUTE/DUPLICATE ATTRIBUTES
+PROJECT S.b, S.d, T.e
+FILTER BY T.e =AttrType: INT *(int *)data=3
+FILTER BY R.c =AttrType: INT *(int *)data=1
+FILTER BY R.b =S.b
+CROSS PROD { 
+  CROSS PROD { 
+    FILE SCAN R
+    ,
+    FILE SCAN S
+   } 
+  ,
+  FILE SCAN T
+ }
+~~~~
+#### Query optimization ####
+In the restricted optimization done in this implementation, the structure formed by the leaf nodes and the binary operators is never changed. The unary condition and projection nodes are pushed down the tree as much as possible. Pushing down condition operators gives us a large efficiency gain by rejecting invalid tuples early. Pushing down projection operator reduces the amount of data flowing between nodes and improves performance. Two separate recursive functions have been implemented for pushing down conditions and projection respectively. These functions are called with root of the binary tree as input and they recursively modify the whole tree. 
+
+At first we push down conditions because some conditions can merge with the file scans to produce index scans. If we push down projections first then they might project out the indexed attributes and thus prevent us from doing index scans. 
+
+##### Pushing Down Conditions #####
+This function is called on the root once. When called on a node, this function calls itself on the child(ren) of the node. Then it operates on the current node only if the node is a condition node. Since conditions are pushed down first, the child of the current node can only be a File Scan node, Index Scan node, Cross Product Node or another Condition node. In this implementation, we are doing index scans only based on equality condition because we don't have the distribution of values in each relation. So, if the child is an Index Scan node then nothing is done. Other three cases are dealt as follows-
+
+(i) Child is File Scan - If the condition is an equality condition having a value as its RHS then the condition is merged with the file scan to produce an Index Scan.
+(ii) Child is another Condition node - Since conditions are commutative, child is swapped with the current node and the function is called again on the current node. This allows conditions to 'pass through' other conditions and hence guarantees each condition will reach as low as possible.
+(iii) Child is a Cross product node - If the RHS of the condition is a value then the condition node is pushed towards the appropriate child containing the LHS attribute. If the RHS is another attribute then the condition is pushed only if both the attributes belong to the same child. If it doesn't then the condition is not moved. The function is again called on the condition after it got pushed down.
+
+The result of this optimization on the above mentioned query is as follows - 
+~~~~
+PERMUTE/DUPLICATE ATTRIBUTES
+PROJECT S.b, S.d, T.e
+CROSS PROD { 
+  FILTER BY R.b =S.b
+  CROSS PROD { 
+    FILTER BY R.c = 1
+    FILE SCAN R
+    ,
+    FILE SCAN S
+   } 
+  ,
+  INDEX SCAN T ON e
+ }
+~~~~
+##### Pushing Down Projections #####
+This function has similar calling architecture as condition pushing function. It is also recursive and is called on the root node. The projection node is more dynamic than the condition node in nature because it results in creation of new nodes in the operator tree. Lets examine the different cases. 
+
+If the function is called on a node which is not a Projection node then it calls it on its child(ren) and returns. If the node is a projection node then different actions are taken based on the type of its child. The child of a Projection Node on which the call has been made can't be another Projection node. It also can't be a Permute/Duplicate node because pushes are only done downwards. If the child is File Scan or Index Scan then nothing is done because it gives no gain in efficiency. The other two cases are-
+
+(i) Child is Condition node - If the current node is a condition node then two cases exist - (a) The projection passes the attributes involved in the condition. In this case the two operators are commutative and hence the Projection node is swapped with the Condition node. (b) If the condition involves at least one attribute not passed by the projection then the condition is no longer pushed down. Instead a new projection operator is defined as the new child of the condition attribute which passes the condition attributes along with the attributes passed by the Projection node on which the function was called. The function is then called again on the new projection operator.
+
+(ii) Child is Cross Product node - In this case the projection operator splits up. The attributes are partitioned into two parts - one belonging to the right child and other belonging to the left child. Two cases arise (a) If both these partitions are non-empty then the two new projection operators are defined and they are pushed down the two children of the Cross Product node and the original Projection operator is deleted. The function is called again on the newly created Projection operators. (b) If one of the partitions is empty then a new Projection node is created and pushed down the child corresponding to the non-empty partition. The original Projection operator is not created. Ideally, this operation should have created an empty projection operator on the other child, which just throws empty tuples. But the current implementation doesn't support empty tuples and hence it has been avoided. It might not require much work to incorporate it but it has been left for now to deal with more interesting issues.
+
+The result of this optimization on the above mentioned query is as follows - 
+~~~~
+PERMUTE/DUPLICATE ATTRIBUTES
+CROSS PROD { 
+  PROJECT S.b, S.d
+  FILTER BY R.b = S.b
+  CROSS PROD { 
+    PROJECT R.b
+    FILTER BY R.c = 1
+    PROJECT R.b, R.c
+    FILE SCAN R
+    ,
+    PROJECT S.b, S.d
+    FILE SCAN S
+   } 
+  ,
+  PROJECT T.e
+  INDEX SCAN T ON e
+ }
+~~~~
+
+#### Query Execution ####
+After all this hard work, query execution is just a matter of calling Open, Next and Close on the root node. The resulting tuples are printed using the Printer class.
+
+#### Update and Delete commands ####
+The update and delete command are fairly simple because they involve only one relation and hence the query tree doesn't have any binary node. However these commands were implemented before implementing the select command and hence the query tree formalism has not been used for them. The effect of the same can be seen in the reduced elegance of code. 
+
+#### Using Scratch Pages for holding records ####
+I have not used scratch pages to hold intermediate records but since my implementation pushes down projections as much as possible, the extra memory used by program would be very small except in pathological cases. Also I thought of a more efficient methods which doesn't require defining a new scratch page for each binary operator but it needs some redesigning of the API. We can change the Open function to accept two pointers. After Query optimization, we traverse the operator tree and for each binary operator we allocate a disjoint portion of the scratch page depending on the size of its the record it needs to hold. A new scratch page is allocated if the current scratch page becomes full. A common portion is allocated for the unary operators. Then Open is called on all the operators with the allocated pointers which are saved by each operator. This implementation would not require number of pages equal to the number of binary operators and hence I request the TA to give a reasonable penalty, which would be 1-2 pages in most practical cases.
+
+
+#### Extra functionality ####
+Some micro optimizations have been done for the two commands - (i) If the update command is called with a trivial condition e.g, for a relation R(a,b) if the update command is "update R set a = a;" then the update is recognized as a trivial update and nothing is done. (ii) If the delete command has no condition then instead of deleting all the tuples, we can delete and recreate the entire relation. This has been implemented by me but has been commented out because we need to display the deleted tuples as a feedback to the user. I have also implemented type coercion, which changes the type of RHS to match the LHS for conditions in the command.
+
+#### Debugging ####
+I tested my implementation on many hand designed queries on small tables for debugging and also on CS145 ebay-dataset for tests. I also used valgrind to check for memory errors.
+
+#### Acknowledgements ####
+As always, I would like to thank Jaeho for discussion and ideas on many implementation aspects. I also consulted this paper on query optimization for some ideas -http://infolab.stanford.edu/~hyunjung/cs346/ioannidis.pdf 
+
+
+
 # sm_DOC #
 
 #### Overview ####
