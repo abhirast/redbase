@@ -2240,9 +2240,8 @@ ostream &operator<<(ostream &s, const AttrInfo &ai)
 
 ostream &operator<<(ostream &s, const RelAttr &qa)
 {
-   return
-      s << (qa.relName ? qa.relName : "NULL")
-      << "." << qa.attrName;
+   if (qa.relName) return s << qa.relName << "." << qa.attrName;
+   return s << qa.attrName;
 }
 
 ostream &operator<<(ostream &s, const Condition &c)
@@ -2258,16 +2257,15 @@ ostream &operator<<(ostream &s, const Condition &c)
 
 ostream &operator<<(ostream &s, const Value &v)
 {
-   s << "AttrType: " << v.type;
    switch (v.type) {
       case INT:
-         s << " *(int *)data=" << *(int *)v.data;
+         s << " " << *(int *)v.data;
          break;
       case FLOAT:
-         s << " *(float *)data=" << *(float *)v.data;
+         s << " " << *(float *)v.data;
          break;
       case STRING:
-         s << " (char *)data=" << (char *)v.data;
+         s << " " << (char *)v.data;
          break;
    }
    return s;

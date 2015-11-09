@@ -43,6 +43,7 @@ struct RM_FileHdr {
 class RM_Record {
     friend class RM_FileHandle;
     friend class RM_FileScan;
+    friend class QL_Manager;
 public:
     RM_Record ();
     ~RM_Record();
@@ -146,6 +147,7 @@ private:
 // RM_Manager: provides RM file management
 //
 class RM_Manager {
+    friend class QL_Manager;        // for accessing pf manager
 public:
     RM_Manager    (PF_Manager &pfm);
     ~RM_Manager   ();

@@ -18,6 +18,8 @@ SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm) {
     ixman = &ixm;
     rmman = &rmm;
     isOpen = false;
+    SHOW_ALL_PLANS = false;
+    SORT_RES = 0;
 }
 
 SM_Manager::~SM_Manager() {
@@ -26,6 +28,36 @@ SM_Manager::~SM_Manager() {
         rmman->CloseFile(attrcat);
     }
 }
+
+RC SM_Manager::Set(const char *paramName, const char *value) {
+    if (strcmp(paramName, "allplans") == 0 && strcmp(value, "1") == 0) {
+        SHOW_ALL_PLANS = true;
+        cout << "Will show all intermediate plans" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "allplans") == 0 && strcmp(value, "0") == 0) {
+        SHOW_ALL_PLANS = false;
+        cout << "Will not show all plans" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "2") == 0) {
+        SORT_RES = 2;
+        cout << "Will sort all resuls descending" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "1") == 0) {
+        SORT_RES = 1;
+        cout << "Will sort all resuls ascending" << endl;
+        return OK_RC;
+    }
+    else if (strcmp(paramName, "sort") == 0 && strcmp(value, "0") == 0) {
+        SORT_RES = 0;
+        cout << "Will not sort all results" << endl;
+        return OK_RC;
+    }
+    return SM_NOT_IMPLEMENTED;
+}
+
 
 /* Steps - 
     1. Change the directory to the directory defined by dbName. Will
@@ -82,13 +114,7 @@ RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes) {
     RC WARN = SM_CREATE_WARN, ERR = SM_CREATE_ERR;
-    for (int i = 0; i < attrCount; i++) {
-        cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
-             << "   attrType="
-             << (attributes[i].attrType == INT ? "INT" :
-                 attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
-             << "   attrLength=" << attributes[i].attrLength << "\n";
-    }
+    
     if (attrCount < 1) return SM_BAD_INPUT;
     // check for duplicate attribute name
     for (int i = 0; i < attrCount; i++) {
@@ -318,24 +344,8 @@ RC SM_Manager::Load(const char *relName,
     relinfo = (RelationInfo*) relinfodata;
     // fetch the attributes in the relation
     vector<DataAttrInfo> attributes;
-    RM_FileScan attrscan;
-    SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
-        MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
-    DataAttrInfo dinfo;
-    char *dinfodata;
-    bool found = false;
-    while(attrscan.GetNextRec(rec) == OK_RC) {
-        found = true;
-        SM_ErrorForward(rec.GetData(dinfodata));
-        // dinfo = (DataAttrInfo) &dinfodata;
-        memcpy(&dinfo, dinfodata, sizeof(DataAttrInfo));
-        attributes.push_back(dinfo);
-    }
-    SM_ErrorForward(attrscan.CloseScan());
-    if (!found) return WARN;
-    // sort the attributes accourding to offset, defined in DataAttrInfo
-    sort(attributes.begin(), attributes.end());
-    // keep track of indexed attributes, initialize their indexhandles
+    SM_ErrorForward(getAttributes(relName, attributes));
+    
     vector<int> ind;
     vector<IX_IndexHandle> ihandles(attributes.size());
     for (size_t i = 0; i < attributes.size(); i++) {
@@ -453,9 +463,6 @@ RC SM_Manager::Print(const char *relName) {
     return OK_RC;
 }
 
-RC SM_Manager::Set(const char *paramName, const char *value) {
-    return SM_NOT_IMPLEMENTED;
-}
 
 RC SM_Manager::Help() {
     RC WARN = SM_PRINT_WARN, ERR = SM_PRINT_ERR;
@@ -640,4 +647,36 @@ RC SM_Manager::getAttrInfo(const char* relName, const char* attrName,
     return OK_RC;
 }
 
+RC SM_Manager::getAttributes(const char *relName, vector<DataAttrInfo> &attributes) {
+    RC WARN = SM_ATTRIBUTE_NOT_FOUND, ERR = SM_ATTRIBUTE_NOT_FOUND;
+    RM_FileScan attrscan;
+    RM_Record rec;
+    SM_ErrorForward(attrscan.OpenScan(attrcat, STRING, 
+        MAXNAME+1, 0, EQ_OP, (void*) relName, NO_HINT));
+    DataAttrInfo dinfo;
+    char *dinfodata;
+    bool found = false;
+    while(attrscan.GetNextRec(rec) == OK_RC) {
+        found = true;
+        SM_ErrorForward(rec.GetData(dinfodata));
+        // dinfo = (DataAttrInfo) &dinfodata;
+        memcpy(&dinfo, dinfodata, sizeof(DataAttrInfo));
+        attributes.push_back(dinfo);
+    }
+    SM_ErrorForward(attrscan.CloseScan());
+    if (!found) return WARN;
+    // sort the attributes accourding to offset, defined in DataAttrInfo
+    sort(attributes.begin(), attributes.end());
+    return OK_RC;
+}
 
+
+RC SM_Manager::getRelation(const char* relName, RelationInfo &relation) {
+    RC WARN = SM_RELATION_NOT_FOUND, ERR = SM_RELATION_NOT_FOUND;
+    RM_Record rec;
+    SM_ErrorForward(getRelInfo(relName, rec));
+    char *relinfodata;
+    SM_ErrorForward(rec.GetData(relinfodata));
+    memcpy(&relation, relinfodata, sizeof(RelationInfo));
+    return OK_RC;
+}
